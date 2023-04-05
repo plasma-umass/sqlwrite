@@ -28,7 +28,7 @@ Pat Metheny
 
 ## Installation
 
-Download and run `make`. Currently Mac only. More to come.
+Download and run `make`. Currently Mac and Linux only.
 
 ## Usage
 
