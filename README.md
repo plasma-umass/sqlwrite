@@ -28,11 +28,17 @@ Pat Metheny
 
 ## Installation
 
-Download and run `make`. Currently Mac and Linux only.
+Download and run `make`. Currently Mac and Linux only. You may need to install the `curl` library.
+
+### Ubuntu
+
+```
+sudo apt install libcurl4-gnutls-dev
+```
 
 ## Usage
 
-Run the generated `sqlite3` file on your database:
+Either use the built-in SQLite (if it was built to allow extensions), or run the generated `sqlite3` file on your database:
 
 ```
 ./sqlite3 my_database.db
@@ -41,7 +47,12 @@ Run the generated `sqlite3` file on your database:
 and then run the following command to load the SQLwrite extension:
 
 ```
-.load sqlwrite
+select load_extension("the_path_to_your_sqlwrite_directory/sqlwrite");
+```
+
+or:
+```
+.load the_path_to_your_sqlwrite_directory/sqlwrite
 ```
 
 You can now issue English language queries by using the `ask` function:
