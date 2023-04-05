@@ -1,14 +1,14 @@
 LIBNAME := sqlwrite
-CXXFLAGS := -std=c++17 -O3 -DNDEBUG -Ifmt/include
+CXXFLAGS := -std=c++17 -O3 -DNDEBUG -I. -Ifmt/include
 CFLAGS := -O3 -DNDEBUG
 
 ifeq ($(shell uname -s),Darwin)
-LIBFILE := lib$(LIBNAME).dylib
+LIBFILE := $(LIBNAME).dylib
 DYNAMIC_LIB := -dynamiclib
 SQLITE_LIB = libsqlite3.dylib
 else
-LIBFILE := lib$(LIBNAME).so
-DYNAMIC_LIB := -shared
+LIBFILE := $(LIBNAME).so
+DYNAMIC_LIB := -shared -fPIC
 SQLITE_LIB = libsqlite3.so
 endif
 
