@@ -2,9 +2,10 @@
 
 by [Emery Berger](https://emeryberger.com)
 
-Integrates AI into your database: automatically converts English-language queries into SQL, and then runs the SQL query.
-As far as we are aware, this is the first integration of natural language queries into a database manager (please
-let us know if this is not the case!).
+Integrates AI into your database: automatically converts
+English-language queries into SQL, and then runs the SQL query.  As
+far as we are aware, this is the first integration of natural language
+queries into a standard database manager.
 
 
 ## Example
