@@ -5,7 +5,7 @@ by [Emery Berger](https://emeryberger.com)
 Integrates AI into your database: automatically converts
 English-language queries into SQL, and then runs the SQL query.  As
 far as we are aware, this is the first integration of natural language
-queries into a database manager. Currently works as an
+queries into a production database manager. Currently works as an
 extension to SQLite3, more to come!
 
 
