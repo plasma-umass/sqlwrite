@@ -48,3 +48,14 @@ You can now issue English language queries by using the `ask` function:
 ```
 SELECT ask('(whatever you want)');
 ```
+
+## Acknowledgements
+
+SQLwrite includes SQLite3 (https://www.sqlite.org/index.html), and is
+built with the assistance of several excellent libraries, whose code
+is (for now) included in this repository:
+
+* https://github.com/olrea/openai-cpp
+* https://github.com/nlohmann/json
+* https://fmt.dev/latest/index.html
+
