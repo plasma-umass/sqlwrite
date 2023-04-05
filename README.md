@@ -5,10 +5,11 @@ by [Emery Berger](https://emeryberger.com)
 Integrates AI into your database: automatically converts
 English-language queries into SQL, and then runs the SQL query.  As
 far as we are aware, this is the first integration of natural language
-queries into a standard database manager.
+queries into a database manager. Currently works as an
+extension to SQLite3, more to come!
 
 
-## Example
+## Examples
 
 ```
 % ./sqlite3 test/test.db
@@ -24,6 +25,19 @@ Wayne Jury
 Strapping Young Lad
 Slayer
 Pat Metheny
+```
+
+Using a [large SQLite database](https://github.com/lerocha/chinook-database/blob/master/ChinookDatabase/DataSources/Chinook_Sqlite.sqlite):
+
+```
+% ./sqlite3 Chinook_Sqlite.sqlite
+sqlite> select ask('show me the total invoiced for all artists.');
+{SQLwrite translation: SELECT SUM(Total) FROM Invoice;}
+2328.6
+
+sqlite> select ask('show me the total invoiced for all artists whose last name starts with "S"');
+{SQLwrite translation: SELECT SUM(Invoice.Total) FROM Invoice JOIN Customer ON Invoice.CustomerId = Customer.CustomerId WHERE Customer.LastName LIKE 'S%';}
+306.98
 ```
 
 ## Installation
