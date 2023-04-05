@@ -35,9 +35,13 @@ int print_em(void* data, int c_num, char** c_vals, char** c_names) {
 #include <iostream>
 #include <string>
 
-std::string removeNewlines(const std::string& s) {
+std::string removeEscapedNewlines(const std::string& s) {
     std::string result = s;
-    result.erase(std::remove(result.begin(), result.end(), '\n'), result.end());
+    std::size_t pos = result.find("\\n");
+    while (pos != std::string::npos) {
+        result.erase(pos, 2);
+        pos = result.find("\\n", pos);
+    }
     return result;
 }
 
@@ -77,8 +81,8 @@ static void ask_command(sqlite3_context *ctx, int argc, sqlite3_value **argv) {
     auto start = result.find("```") + 3; // add 3 to skip over the backquotes
     auto end = result.rfind("```"); // find the last occurrence of backquotes
     output = result.substr(start, end - start); // extract the substring between the backquotes
-    // Remove any newlines.
-    output = removeNewlines(output);
+    // Remove any escaped newlines.
+    output = removeEscapedNewlines(output);
     // Add a semicolon.
     output += ";";
     std::cout << "{SQLwrite translation: " << output.c_str() << "}\n";
