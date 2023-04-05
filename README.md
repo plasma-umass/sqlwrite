@@ -3,13 +3,15 @@
 by [Emery Berger](https://emeryberger.com)
 
 Integrates AI into your database: automatically converts
-English-language queries into SQL, and then runs the SQL query.  As
+natural language queries into SQL, and then runs the SQL query.  As
 far as we are aware, this is the first integration of natural language
 queries into a production database manager. Currently works as an
 extension to SQLite3, more to come!
 
 
 ## Examples
+
+### Basic query synthesis
 
 ```
 % ./sqlite3 test/test.db
@@ -27,6 +29,8 @@ Slayer
 Pat Metheny
 ```
 
+### Large databases, synthesizes JOINs
+
 Using a [large SQLite database](https://github.com/lerocha/chinook-database/blob/master/ChinookDatabase/DataSources/Chinook_Sqlite.sqlite):
 
 ```
@@ -38,6 +42,18 @@ sqlite> select ask('show me the total invoiced for all artists.');
 sqlite> select ask('show me the total invoiced for all artists whose last name starts with "S"');
 {SQLwrite translation: SELECT SUM(Invoice.Total) FROM Invoice JOIN Customer ON Invoice.CustomerId = Customer.CustomerId WHERE Customer.LastName LIKE 'S%';}
 306.98
+```
+
+### Natural languages besides English!
+
+```
+sqlite> select ask('Haz una lista de todos los artistas cuyos nombres empiezan con la letra L');
+{SQLwrite translation: SELECT Name FROM Artist WHERE Name LIKE 'L%';}
+Led Zeppelin
+Luiz Melodia
+Legião Urbana
+Lenny Kravitz
+[...]
 ```
 
 ## Installation
