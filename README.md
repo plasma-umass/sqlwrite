@@ -31,7 +31,13 @@ Download and run `make`. Currently Mac only. More to come.
 
 ## Usage
 
-Run the generated `sqlite3` file, and then run the following command to load the SQLwrite extension:
+Run the generated `sqlite3` file on your database:
+
+```
+./sqlite3 my_database.db
+```
+
+and then run the following command to load the SQLwrite extension:
 
 ```
 .load sqlwrite
