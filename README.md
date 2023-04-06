@@ -2,11 +2,11 @@
 
 by [Emery Berger](https://emeryberger.com)
 
-Integrates AI into your database: automatically converts
-natural language queries into SQL, and then runs the SQL query.  As
-far as we are aware, this is the first integration of natural language
-queries into a production database manager. Currently works as an
-extension to SQLite3, more to come!
+Integrates AI into your database: automatically converts natural
+language queries into SQL, and then runs the SQL query.  As far as we
+are aware, this is the first integration of LLMs to enable natural
+language queries into a production database manager. Currently works
+as an extension to SQLite3, more to come!
 
 
 ## Examples
