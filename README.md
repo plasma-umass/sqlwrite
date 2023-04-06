@@ -11,49 +11,53 @@ extension to SQLite3, more to come!
 
 ## Examples
 
-### Basic query synthesis
+These example queries use a [large SQLite database with multiple tables](https://github.com/lerocha/chinook-database/blob/master/ChinookDatabase/DataSources/Chinook_Sqlite.sqlite):
 
-```
-% ./sqlite3 test/test.db
-SQLite version 3.41.2 2023-03-22 11:56:21
-Enter ".help" for usage hints.
-sqlite> .load sqlwrite
-SQLwrite extension successfully initialized. Please report any issues to https://github.com/plasma-umass/sqlwrite/issues/new
-sqlite> select ask('give me a list of all artist names that contain the letter y.');
-SQL query: SELECT ArtistName FROM Artists WHERE ArtistName LIKE '%y%';
-Paul McCartney
-The Tea Party
-Wayne Jury
-Strapping Young Lad
-Slayer
-Pat Metheny
-```
-
-### Large databases, synthesizes JOINs
-
-Using a [large SQLite database](https://github.com/lerocha/chinook-database/blob/master/ChinookDatabase/DataSources/Chinook_Sqlite.sqlite):
+### Basic queries
 
 ```
 % ./sqlite3 Chinook_Sqlite.sqlite
 sqlite> select ask('show me the total invoiced for all artists.');
-{SQLwrite translation: SELECT SUM(Total) FROM Invoice;}
 2328.6
+(SQLwrite translation to SQL: SELECT sum(Invoice.Total) FROM Invoice;;)
+```
 
+### Queries with JOINs
+
+```
 sqlite> select ask('show me the total invoiced for all artists whose last name starts with "S"');
-{SQLwrite translation: SELECT SUM(Invoice.Total) FROM Invoice JOIN Customer ON Invoice.CustomerId = Customer.CustomerId WHERE Customer.LastName LIKE 'S%';}
 306.98
+(SQLwrite translation to SQL: SELECT SUM(Invoice.Total) as total_invoiced    FROM Invoice        JOIN Customer ON Invoice.CustomerId = Customer.CustomerId    WHERE Customer.LastName LIKE 'S%';)
+```
+
+### Complex query synthesis with multiple JOINs
+
+```
+sqlite> select ask('give me a list of all artists (with no duplicates) whose genre is reggae');
+Cidade Negra
+Lenny Kravitz
+UB40
+(SQLwrite translation to SQL: SELECT DISTINCT Artist.Name     FROM Artist    JOIN Album ON Artist.ArtistId = Album.ArtistId    JOIN Track ON Album.AlbumId = Track.AlbumId    JOIN Genre ON Track.GenreId = Genre.GenreId    WHERE Genre.Name = 'Reggae';;)
 ```
 
 ### Natural languages besides English!
 
 ```
 sqlite> select ask('Haz una lista de todos los artistas cuyos nombres empiezan con la letra L');
-{SQLwrite translation: SELECT Name FROM Artist WHERE Name LIKE 'L%';}
 Led Zeppelin
 Luiz Melodia
 Legião Urbana
 Lenny Kravitz
-[...]
+Lulu Santos
+Lost
+Los Lonely Boys
+Los Hermanos
+Luciana Souza/Romero Lubambo
+London Symphony Orchestra & Sir Charles Mackerras
+Luciano Pavarotti
+Leonard Bernstein & New York Philharmonic
+Les Arts Florissants & William Christie
+(SQLwrite translation to SQL: SELECT Name FROM Artist WHERE Name LIKE 'L%';)
 ```
 
 ## Installation
