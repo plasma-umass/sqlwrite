@@ -35,11 +35,26 @@ int print_em(void* data, int c_num, char** c_vals, char** c_names) {
 #include <iostream>
 #include <string>
 
+std::string removeEscapedCharacters(const std::string& s) {
+    std::string result = s;
+    std::size_t pos = result.find("\\");
+    while (pos != std::string::npos) {
+        if (result[pos+1] == 'n') { // Check if escaped newline
+            result.replace(pos, 2, " "); // Replace with single space
+        } else if (result[pos+1] == '"') { // Check if escaped quote
+            result.erase(pos, 1); // Remove backslash
+        }
+        pos = result.find("\\", pos+1); // Find next escaped character
+    }
+    return result;
+}
+
+
 std::string removeEscapedNewlines(const std::string& s) {
     std::string result = s;
     std::size_t pos = result.find("\\n");
     while (pos != std::string::npos) {
-        result.erase(pos, 2);
+      result.replace(pos, 2, " ");
         pos = result.find("\\n", pos);
     }
     return result;
@@ -73,30 +88,39 @@ static void ask_command(sqlite3_context *ctx, int argc, sqlite3_value **argv) {
 
   auto prompt_str = prompt.dump();
 
-  try {
-    auto chat = openai::chat().create(prompt); // prompt_str.c_str());
-    auto result = chat["choices"][0]["message"]["content"].dump(2);
-    std::string output;
-
-    auto start = result.find("```") + 3; // add 3 to skip over the backquotes
-    auto end = result.rfind("```"); // find the last occurrence of backquotes
-    output = result.substr(start, end - start); // extract the substring between the backquotes
-    // Remove any escaped newlines.
-    output = removeEscapedNewlines(output);
-    // Add a semicolon.
-    output += ";";
-    std::cout << "{SQLwrite translation: " << output.c_str() << "}\n";
-
-    // Send the query to the database.
-    auto rc = sqlite3_exec(db, output.c_str(), print_em, nullptr, nullptr);
-
-    if (rc != SQLITE_OK) {
-      std::cout << "Error executing SQL statement: " << sqlite3_errmsg(db) << std::endl;
-      return;
+  int attemptsRemaining = 3;
+  while (attemptsRemaining) {
+    try {
+      auto chat = openai::chat().create(prompt); // prompt_str.c_str());
+      auto result = chat["choices"][0]["message"]["content"].dump(2);
+      std::string output;
+      
+      auto start = result.find("```") + 3; // add 3 to skip over the backquotes
+      auto end = result.rfind("```"); // find the last occurrence of backquotes
+      output = result.substr(start, end - start); // extract the substring between the backquotes
+      // Remove any escaped newlines.
+      output = removeEscapedNewlines(output);
+      output = removeEscapedCharacters(output);
+      // Add a semicolon.
+      output += ";";
+      
+      // Send the query to the database.
+      auto rc = sqlite3_exec(db, output.c_str(), print_em, nullptr, nullptr);
+      
+      if (rc != SQLITE_OK) {
+	if (attemptsRemaining == 0) {
+	  std::cout << "Error executing SQL statement: " << sqlite3_errmsg(db) << std::endl;
+	  sqlite3_finalize(stmt);
+	  return;
+	}
+	attemptsRemaining--;
+	continue;
+      }
+      std::cout << "(SQLwrite translation to SQL: " << output.c_str() << ")\n";
+      attemptsRemaining = 0;
+    } catch (std::runtime_error re) {
+      std::cout << "Runtime error: " << re.what() << std::endl;
     }
-    
-  } catch (std::runtime_error re) {
-    std::cout << "Runtime error: " << re.what() << std::endl;
   }
   sqlite3_finalize(stmt);
 }
