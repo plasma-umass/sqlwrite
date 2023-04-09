@@ -60,13 +60,7 @@ std::string removeEscapedNewlines(const std::string& s) {
     return result;
 }
 
-     
-static void ask_command(sqlite3_context *ctx, int argc, sqlite3_value **argv) {
-
-  if (argc != 1) {
-    sqlite3_result_error(ctx, "The 'ask' command takes exactly one argument.", -1);
-  }
-
+static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **argv) {
   // Print all loaded database schemas
   sqlite3 *db = sqlite3_context_db_handle(ctx);
   sqlite3_stmt *stmt;
@@ -166,6 +160,21 @@ static void ask_command(sqlite3_context *ctx, int argc, sqlite3_value **argv) {
   sqlite3_finalize(stmt);
 }
 
+     
+static void ask_command(sqlite3_context *ctx, int argc, sqlite3_value **argv) {
+  if (argc != 1) {
+    sqlite3_result_error(ctx, "The 'ask' command takes exactly one argument.", -1);
+  }
+  real_ask_command(ctx, argc, argv);
+}
+
+
+static void sqlwrite_command(sqlite3_context *ctx, int argc, sqlite3_value **argv) {
+  if (argc != 1) {
+    sqlite3_result_error(ctx, "The 'sqlwrite' command takes exactly one argument.", -1);
+  }
+  real_ask_command(ctx, argc, argv);
+}
 
 
 extern "C" int sqlite3_sqlwrite_init(sqlite3 *db, char **pzErrMsg, const sqlite3_api_routines *pApi)
@@ -173,12 +182,19 @@ extern "C" int sqlite3_sqlwrite_init(sqlite3 *db, char **pzErrMsg, const sqlite3
   openai::start();
   SQLITE_EXTENSION_INIT2(pApi);
     
-  int rc = sqlite3_create_function(db, "ask", -1, SQLITE_UTF8, db, &ask_command, NULL, NULL);
+  int rc;
+
+  rc = sqlite3_create_function(db, "ask", -1, SQLITE_UTF8, db, &ask_command, NULL, NULL);
   if (rc != SQLITE_OK) {
     *pzErrMsg = sqlite3_mprintf("Failed to create ask function: %s", sqlite3_errmsg(db));
     return rc;
   }
-  printf("SQLwrite extension successfully initialized. Please report any issues to https://github.com/plasma-umass/sqlwrite/issues/new\n");
+  rc = sqlite3_create_function(db, "sqlwrite", -1, SQLITE_UTF8, db, &sqlwrite_command, NULL, NULL);
+  if (rc != SQLITE_OK) {
+    *pzErrMsg = sqlite3_mprintf("Failed to create sqlwrite function: %s", sqlite3_errmsg(db));
+    return rc;
+  }
+  printf("SQLwrite extension successfully initialized. You can now use natural language queries like \"select ask('show me all artists.');\".\nPlease report any issues to https://github.com/plasma-umass/sqlwrite/issues/new\n");
 
   return SQLITE_OK;
 }
