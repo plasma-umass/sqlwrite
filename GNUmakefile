@@ -1,5 +1,5 @@
 LIBNAME := sqlwrite
-CXXFLAGS := -std=c++17 -O3 -DNDEBUG -I. -Ifmt/include
+CXXFLAGS := -std=c++17 -g -O3 -DNDEBUG -I. -Ifmt/include
 CFLAGS := -O3 -DNDEBUG
 
 ifeq ($(shell uname -s),Darwin)
