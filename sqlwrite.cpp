@@ -65,7 +65,7 @@ static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
   sqlite3 *db = sqlite3_context_db_handle(ctx);
   sqlite3_stmt *stmt;
 
-  auto query = fmt::format("Given a database with the following tables, schemas, and indexes, write a SQL query in SQLite's SQL dialect that answers this question or produces the desired report: '{}'. Produce a JSON object with the SQL query as a field \"SQL\". Offer any suggestions for indexing to improve query performance in a field \"Indexing\", where each entry consists of the table name and a list of columns to be indexed. Only produce output that can be parsed as JSON.\n\nSchemas:\n", (const char *) sqlite3_value_text(argv[0]));
+  auto query = fmt::format("Given a database with the following tables, schemas, and indexes, write a SQL query in SQLite's SQL dialect that answers this question or produces the desired report: '{}'. Produce a JSON object with the SQL query as a field \"SQL\". Offer a list of suggestions as SQL commands to create indexes that would improve query performance in a field \"Indexing\". Do so only if those indexes are not already given in 'Existing indexes'. Only produce output that can be parsed as JSON.\n\nSchemas:\n", (const char *) sqlite3_value_text(argv[0]));
   
   sqlite3_prepare_v2(db, "SELECT name, sql FROM sqlite_master WHERE type='table' OR type='view'", -1, &stmt, NULL);
 
@@ -91,7 +91,7 @@ static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
   sqlite3_prepare_v2(db, "SELECT type, name, tbl_name, sql FROM sqlite_master WHERE type='index'", -1, &stmt, NULL);
   while (sqlite3_step(stmt) == SQLITE_ROW) {
     if (!printed_index_header) {
-      query += "\n\nIndexes:\n";
+      query += "\n\nExisting indexes:\n";
       printed_index_header = true;
     }
     const char *tbl_name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
@@ -142,18 +142,29 @@ static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
       
       if (rc != SQLITE_OK) {
 	if (attemptsRemaining == 0) {
-	  std::cout << "Error executing SQL statement: " << sqlite3_errmsg(db) << std::endl;
+	  std::cout << fmt::format("Error executing SQL statement: {}\n", sqlite3_errmsg(db));
 	  sqlite3_finalize(stmt);
 	  return;
 	}
 	attemptsRemaining--;
 	continue;
       }
-      std::cout << "(SQLwrite translation to SQL: " << output.c_str() << ")\n";
-      attemptsRemaining = 0;
+      std::cout << fmt::format("[SQLwrite] translation to SQL: {}\n", output.c_str());
+
+      if (json_result["Indexing"].size() > 0) {
+	std::cout << "[SQLwrite] indexing suggestions to improve the performance for this query:" << std::endl;
+	int i = 0;
+	for (auto& item : json_result["Indexing"]) {
+	  i++;
+	  std::cout << fmt::format("({}): {}\n", i, item.get<std::string>());
+	}
+      }
+      break;
     } catch (std::runtime_error re) {
-      std::cout << "Runtime error: " << re.what() << std::endl;
+      std::cout << fmt::format("Runtime error: {}\n", re.what());
     } catch (nlohmann::json_abi_v3_11_2::detail::parse_error pe) {
+      // Retry if there were JSON parse errors.
+    } catch (nlohmann::json_abi_v3_11_2::detail::type_error te) {
       // Retry if there were JSON parse errors.
     }
   }
