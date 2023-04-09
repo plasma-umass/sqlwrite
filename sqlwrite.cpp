@@ -103,7 +103,7 @@ static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
   prompt["model"] = "gpt-3.5-turbo";
   nlohmann::json chat_message;
   chat_message["role"] = "assistant";
-  chat_message["content"] = "I am a programming assistant who is an expert in generating SQL queries from natural language. I ONLY respond with JSON objects.";
+  chat_message["content"] = "You are a programming assistant who is an expert in generating SQL queries from natural language. You ONLY respond with JSON objects.";
   prompt["messages"].push_back(chat_message);
   chat_message["role"] = "user";
   chat_message["content"] = query;
