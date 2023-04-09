@@ -62,6 +62,7 @@ std::string removeEscapedNewlines(const std::string& s) {
 
      
 static void ask_command(sqlite3_context *ctx, int argc, sqlite3_value **argv) {
+
   if (argc != 1) {
     sqlite3_result_error(ctx, "The 'ask' command takes exactly one argument.", -1);
   }
@@ -69,41 +70,79 @@ static void ask_command(sqlite3_context *ctx, int argc, sqlite3_value **argv) {
   // Print all loaded database schemas
   sqlite3 *db = sqlite3_context_db_handle(ctx);
   sqlite3_stmt *stmt;
+
+  auto query = fmt::format("Given a database with the following tables, schemas, and indexes, write a SQL query in SQLite's SQL dialect that answers this question or produces the desired report: '{}'. Produce a JSON object with the SQL query as a field \"SQL\". Offer any suggestions for indexing to improve query performance in a field \"Indexing\", where each entry consists of the table name and a list of columns to be indexed. Only produce output that can be parsed as JSON.\n\nSchemas:\n", (const char *) sqlite3_value_text(argv[0]));
+  
   sqlite3_prepare_v2(db, "SELECT name, sql FROM sqlite_master WHERE type='table' OR type='view'", -1, &stmt, NULL);
 
-  auto query = fmt::format("Given a database with the following tables and schemas, write a SQL query in SQLite's SQL dialect that answers this question or produces the desired report: '{}'. Only produce the SQL query, surrounded in backquotes (```).\n\nSchemas:\n", (const char *) sqlite3_value_text(argv[0]));
+  auto total_tables = 0;
   
   while (sqlite3_step(stmt) == SQLITE_ROW) {
     const char *name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
     const char *sql = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
     query += fmt::format("Schema for {}: {}\n", name, sql);
+    total_tables++;
+  }
+
+  // Fail gracefully if no databases are present.
+  if (total_tables == 0) {
+    std::cout << "SQLwrite: you need to load a table first." << std::endl;
+    sqlite3_finalize(stmt);
+    return;
+  }
+
+  // Add indexes, if any.
+
+  auto printed_index_header = false;
+  sqlite3_prepare_v2(db, "SELECT type, name, tbl_name, sql FROM sqlite_master WHERE type='index'", -1, &stmt, NULL);
+  while (sqlite3_step(stmt) == SQLITE_ROW) {
+    if (!printed_index_header) {
+      query += "\n\nIndexes:\n";
+      printed_index_header = true;
+    }
+    const char *tbl_name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+    const char *sql = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
+    query += fmt::format("Index for {}: {}\n", tbl_name, sql);
   }
 
   nlohmann::json prompt;
   prompt["model"] = "gpt-3.5-turbo";
-  nlohmann::json chat_messages;
-  chat_messages["role"] = "user";
-  chat_messages["content"] = query;
-  prompt["messages"].push_back(chat_messages);
-
+  nlohmann::json chat_message;
+  chat_message["role"] = "assistant";
+  chat_message["content"] = "I am a programming assistant who is an expert in generating SQL queries from natural language. I ONLY respond with JSON objects.";
+  prompt["messages"].push_back(chat_message);
+  chat_message["role"] = "user";
+  chat_message["content"] = query;
+  prompt["messages"].push_back(chat_message);
+ 
   auto prompt_str = prompt.dump();
 
+  // std::cout << prompt_str << std::endl;
+  
   int attemptsRemaining = 3;
   while (attemptsRemaining) {
     try {
       auto chat = openai::chat().create(prompt); // prompt_str.c_str());
-      auto result = chat["choices"][0]["message"]["content"].dump(2);
-      std::string output;
+      /// nlohmann::json result = nlohmann::json::parse("{\n    \"SQL\": \"SELECT ArtistId FROM Artists WHERE ArtistName = 'Primus';\",\n    \"Indexing\": {\n        \"Artists\": [\"ArtistName\"]\n    }\n}");
+      auto result = chat["choices"][0]["message"]["content"].get<std::string>();
+      // std::cout << "attempting to parse." << std::endl;
+      auto json_result = nlohmann::json::parse(result);
+      // std::cout << json_result.dump() << std::endl;
       
-      auto start = result.find("```") + 3; // add 3 to skip over the backquotes
-      auto end = result.rfind("```"); // find the last occurrence of backquotes
-      output = result.substr(start, end - start); // extract the substring between the backquotes
+      std::string output;
+
+      //std::cout << "SQL:" << std::endl;
+      //std::cout << json_result["SQL"].get<std::string>() << std::endl;
+      //std::cout << "Indexing:" << std::endl;
+      //std::cout << json_result["Indexing"].dump() << std::endl;
+
+      // TODO: subtract set of indexing results from already-indexed columns, and present to user as suggestions
+      
+      output = json_result["SQL"].get<std::string>();
       // Remove any escaped newlines.
       output = removeEscapedNewlines(output);
       output = removeEscapedCharacters(output);
-      // Add a semicolon.
-      output += ";";
-      
+
       // Send the query to the database.
       auto rc = sqlite3_exec(db, output.c_str(), print_em, nullptr, nullptr);
       
@@ -120,6 +159,8 @@ static void ask_command(sqlite3_context *ctx, int argc, sqlite3_value **argv) {
       attemptsRemaining = 0;
     } catch (std::runtime_error re) {
       std::cout << "Runtime error: " << re.what() << std::endl;
+    } catch (nlohmann::json_abi_v3_11_2::detail::parse_error pe) {
+      // Retry if there were JSON parse errors.
     }
   }
   sqlite3_finalize(stmt);
