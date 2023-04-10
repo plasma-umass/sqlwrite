@@ -15,6 +15,7 @@
 #include <string>
 
 #include <fmt/core.h>
+#include <fmt/format.h>
 
 #include "openai.hpp"
 #include "sqlite3ext.h"
@@ -94,9 +95,13 @@ static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
       query += "\n\nExisting indexes:\n";
       printed_index_header = true;
     }
-    const char *tbl_name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
-    const char *sql = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
-    query += fmt::format("Index for {}: {}\n", tbl_name, sql);
+    try {
+      const char *tbl_name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+      const char *sql = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
+      query += fmt::format("Index for {}: {}\n", tbl_name, sql);
+    } catch (fmt::v9::format_error& fe) {
+      // Ignore indices where the query response is null, which could get us here.
+    }
   }
 
   nlohmann::json prompt;
@@ -160,12 +165,15 @@ static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
 	}
       }
       break;
-    } catch (std::runtime_error re) {
+    } catch (std::runtime_error& re) {
       std::cout << fmt::format("Runtime error: {}\n", re.what());
-    } catch (nlohmann::json_abi_v3_11_2::detail::parse_error pe) {
+    } catch (nlohmann::json_abi_v3_11_2::detail::parse_error& pe) {
       // Retry if there were JSON parse errors.
-    } catch (nlohmann::json_abi_v3_11_2::detail::type_error te) {
+    } catch (nlohmann::json_abi_v3_11_2::detail::type_error& te) {
       // Retry if there were JSON parse errors.
+    } catch (fmt::v9::format_error& fe) {
+      std::cerr << "error: " << fe.what() << std::endl;
+      // Retry if there is a format error.
     }
   }
   sqlite3_finalize(stmt);
