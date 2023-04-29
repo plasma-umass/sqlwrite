@@ -6,20 +6,32 @@ Integrates AI into your database: automatically converts natural
 language queries into SQL, and then runs the SQL query.  As far as we
 are aware, this is the first integration of LLMs to enable natural
 language queries into a production database manager. Currently works
-as an extension to SQLite3, more to come!
-
+as an extension to SQLite3 (more to come). In addition to generating
+queries, SQLwrite also produces suggestions to improve query
+performance (e.g., creating new indices).
 
 ## Examples
 
 These example queries use a [large SQLite database with multiple tables](https://github.com/lerocha/chinook-database/blob/master/ChinookDatabase/DataSources/Chinook_Sqlite.sqlite):
 
-### Basic queries
+### Getting started
 
 ```
 % ./sqlite3 Chinook_Sqlite.sqlite
+sqlite> .load sqlwrite
+SQLwrite extension successfully initialized. You can now use natural language queries like "select ask('show me all artists.');".
+Please report any issues to https://github.com/plasma-umass/sqlwrite/issues/new
+```
+
+### Basic queries
+
+```
 sqlite> select ask('show me the total invoiced for all artists.');
 2328.6
-(SQLwrite translation to SQL: SELECT sum(Invoice.Total) FROM Invoice;;)
+[SQLwrite] translation to SQL: SELECT SUM(Total) AS total_invoiced FROM Invoice;
+[SQLwrite] indexing suggestions to improve the performance for this query:
+(1): CREATE INDEX idx_invoice_total ON Invoice (Total);
+(2): CREATE INDEX idx_customer_invoice ON Invoice (CustomerId);
 ```
 
 ### Queries with JOINs
@@ -27,7 +39,10 @@ sqlite> select ask('show me the total invoiced for all artists.');
 ```
 sqlite> select ask('show me the total invoiced for all artists whose last name starts with "S"');
 306.98
-(SQLwrite translation to SQL: SELECT SUM(Invoice.Total) as total_invoiced    FROM Invoice        JOIN Customer ON Invoice.CustomerId = Customer.CustomerId    WHERE Customer.LastName LIKE 'S%';)
+[SQLwrite] translation to SQL: SELECT sum(Invoice.Total) as total_invoiced FROM Invoice JOIN Customer ON Invoice.CustomerId = Customer.CustomerId WHERE Customer.LastName LIKE 'S%'
+[SQLwrite] indexing suggestions to improve the performance for this query:
+(1): CREATE INDEX idx_invoice_customer_lastname ON Invoice (CustomerId) WHERE (CustomerId IN (SELECT CustomerId FROM Customer WHERE LastName LIKE 'S%'))
+(2): CREATE INDEX idx_customer_lastname ON Customer (LastName)
 ```
 
 ### Complex query synthesis with multiple JOINs
@@ -37,27 +52,32 @@ sqlite> select ask('give me a list of all artists (with no duplicates) whose gen
 Cidade Negra
 Lenny Kravitz
 UB40
-(SQLwrite translation to SQL: SELECT DISTINCT Artist.Name     FROM Artist    JOIN Album ON Artist.ArtistId = Album.ArtistId    JOIN Track ON Album.AlbumId = Track.AlbumId    JOIN Genre ON Track.GenreId = Genre.GenreId    WHERE Genre.Name = 'Reggae';;)
+[SQLwrite] translation to SQL: SELECT DISTINCT Artist.Name FROM Artist JOIN Album ON Album.ArtistId = Artist.ArtistId JOIN Track ON Track.AlbumId = Album.AlbumId JOIN Genre ON Track.GenreId = Genre.GenreId WHERE Genre.Name = 'Reggae';
+[SQLwrite] indexing suggestions to improve the performance for this query:
+(1): CREATE INDEX [IFK_TrackGenreReggae] ON [Track] ([GenreId]) WHERE Name = 'Reggae';
 ```
 
 ### Natural languages besides English!
 
 ```
-sqlite> select ask('Haz una lista de todos los artistas cuyos nombres empiezan con la letra L');
-Led Zeppelin
-Luiz Melodia
-Legião Urbana
-Lenny Kravitz
-Lulu Santos
-Lost
-Los Lonely Boys
-Los Hermanos
-Luciana Souza/Romero Lubambo
-London Symphony Orchestra & Sir Charles Mackerras
-Luciano Pavarotti
-Leonard Bernstein & New York Philharmonic
-Les Arts Florissants & William Christie
-(SQLwrite translation to SQL: SELECT Name FROM Artist WHERE Name LIKE 'L%';)
+sqlite> select ask('Haz una lista de todos los músicos cuyos nombres empiezan con la letra L');
+select ask('Haz una lista de todos los músicos cuyos nombres empiezan con la letra L');
+22|Led Zeppelin
+33|Luiz Melodia
+99|Legião Urbana
+100|Lenny Kravitz
+101|Lulu Santos
+149|Lost
+162|Los Lonely Boys
+187|Los Hermanos
+201|Luciana Souza/Romero Lubambo
+223|London Symphony Orchestra & Sir Charles Mackerras
+227|Luciano Pavarotti
+228|Leonard Bernstein & New York Philharmonic
+258|Les Arts Florissants & William Christie
+[SQLwrite] translation to SQL: SELECT * FROM Artist WHERE Name LIKE 'L%';
+[SQLwrite] indexing suggestions to improve the performance for this query:
+(1): CREATE INDEX [IFK_ArtistName] ON [Artist] ([Name]);
 ```
 
 ## Installation
