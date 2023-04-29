@@ -61,7 +61,6 @@ UB40
 
 ```
 sqlite> select ask('Haz una lista de todos los músicos cuyos nombres empiezan con la letra L');
-select ask('Haz una lista de todos los músicos cuyos nombres empiezan con la letra L');
 22|Led Zeppelin
 33|Luiz Melodia
 99|Legião Urbana
