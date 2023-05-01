@@ -167,6 +167,7 @@ static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
       break;
     } catch (std::runtime_error& re) {
       std::cout << fmt::format("Runtime error: {}\n", re.what());
+      break;
     } catch (nlohmann::json_abi_v3_11_2::detail::parse_error& pe) {
       // Retry if there were JSON parse errors.
     } catch (nlohmann::json_abi_v3_11_2::detail::type_error& te) {
@@ -213,7 +214,16 @@ extern "C" int sqlite3_sqlwrite_init(sqlite3 *db, char **pzErrMsg, const sqlite3
     *pzErrMsg = sqlite3_mprintf("Failed to create sqlwrite function: %s", sqlite3_errmsg(db));
     return rc;
   }
-  printf("SQLwrite extension successfully initialized. You can now use natural language queries like \"select ask('show me all artists.');\".\nPlease report any issues to https://github.com/plasma-umass/sqlwrite/issues/new\n");
+  const char* key = std::getenv("OPENAI_API_KEY");
+  if (!key) {
+    printf("To use SQLwrite, you must have an API key saved as the environment variable OPENAI_API_KEY.\n");
+    printf("For example, run `export OPENAI_API_KEY=sk-...`.\n");
+    printf("If you do not have a key, you can get one here: https://openai.com/api/.\n");
+    *pzErrMsg = sqlite3_mprintf("OPENAI_API_KEY environment variable not set.\n");
+    return SQLITE_ERROR;
+  }
+  
+  printf("SQLwrite extension successfully initialized.\nYou can now use natural language queries like \"select ask('show me all artists.');\".\nPlease report any issues to https://github.com/plasma-umass/sqlwrite/issues/new\n");
 
   return SQLITE_OK;
 }
