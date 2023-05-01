@@ -10,6 +10,15 @@ as an extension to SQLite3 (more to come). In addition to generating
 queries, SQLwrite also produces suggestions to improve query
 performance (e.g., creating new indices).
 
+*NOTE*: To use SQLwrite, you must first set up an OpenAI API key. If you
+already have an API key, you can set it as an environment variable
+called `OPENAI_API_KEY`. If you do not have one yet,
+you can get a key here: https://platform.openai.com/account/api-keys
+
+```
+export OPENAI_API_KEY=<your-api-key>
+```
+
 ## Examples
 
 These example queries use a [large SQLite database with multiple tables](https://github.com/lerocha/chinook-database/blob/master/ChinookDatabase/DataSources/Chinook_Sqlite.sqlite):
@@ -17,6 +26,7 @@ These example queries use a [large SQLite database with multiple tables](https:/
 ### Getting started
 
 ```
+% export OPENAI_API_KEY=<your-api-key>
 % ./sqlite3 Chinook_Sqlite.sqlite
 sqlite> .load sqlwrite
 SQLwrite extension successfully initialized. You can now use natural language queries like "select ask('show me all artists.');".
