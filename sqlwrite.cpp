@@ -146,11 +146,12 @@ static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
       auto rc = sqlite3_exec(db, output.c_str(), print_em, nullptr, nullptr);
       
       if (rc != SQLITE_OK) {
+	std::cerr << fmt::format("[SQLwrite] Error executing SQL statement: {}\n", sqlite3_errmsg(db));
 	if (attemptsRemaining == 0) {
-	  std::cout << fmt::format("Error executing SQL statement: {}\n", sqlite3_errmsg(db));
 	  sqlite3_finalize(stmt);
 	  return;
 	}
+	std::cerr << "[SQLwrite] Retrying..." << std::endl;
 	attemptsRemaining--;
 	continue;
       }
