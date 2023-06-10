@@ -35,7 +35,7 @@ Please report any issues to https://github.com/plasma-umass/sqlwrite/issues/new
 
 ### Basic queries
 
-```
+```sql
 sqlite> select ask('show me the total invoiced for all artists.');
 2328.6
 [SQLwrite] translation to SQL: SELECT SUM(Total) AS total_invoiced FROM Invoice;
@@ -46,7 +46,7 @@ sqlite> select ask('show me the total invoiced for all artists.');
 
 ### Queries with JOINs
 
-```
+```sql
 sqlite> select ask('show me the total invoiced for all artists whose last name starts with "S"');
 306.98
 [SQLwrite] translation to SQL: SELECT sum(Invoice.Total) as total_invoiced FROM Invoice JOIN Customer ON Invoice.CustomerId = Customer.CustomerId WHERE Customer.LastName LIKE 'S%'
@@ -57,7 +57,7 @@ sqlite> select ask('show me the total invoiced for all artists whose last name s
 
 ### Complex query synthesis with multiple JOINs
 
-```
+```sql
 sqlite> select ask('give me a list of all artists (with no duplicates) whose genre is reggae');
 Cidade Negra
 Lenny Kravitz
@@ -69,7 +69,7 @@ UB40
 
 ### Natural languages besides English!
 
-```
+```sql
 sqlite> select ask('Haz una lista de todos los músicos cuyos nombres empiezan con la letra L');
 22|Led Zeppelin
 33|Luiz Melodia
@@ -120,7 +120,7 @@ or:
 
 You can now issue English language queries by using the `ask` function:
 
-```
+```sql
 SELECT ask('(whatever you want)');
 ```
 
