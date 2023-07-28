@@ -10,7 +10,7 @@ using namespace openai;
 namespace ai {
   
   enum class ai_config { GPT_35 = 1, GPT_4 = 2 };
-  enum class ai_exception_value { NO_KEY_DEFINED, TOO_MANY_RETRIES };
+  enum class ai_exception_value { NO_KEY_DEFINED, INVALID_KEY, TOO_MANY_RETRIES };
 
   class ai_exception {
   public:
@@ -35,6 +35,7 @@ namespace ai {
     };
     explicit ai_stream(params p)
     {
+      openai::start();
       _key = p.apiKey;
       _maxRetries = p.maxRetries;
       if (_key == "") {
@@ -77,14 +78,11 @@ namespace ai {
     // Overload >> operator to read responses
     ai_stream& operator>>(json& response_json) {
       response_json = {{}};
-      if (!_started) {
-	openai::start();
-	_started = true;
-      }
       auto retries = _maxRetries;
       while (true) {
 	if (retries == 0) {
-	  throw ai_exception(ai_exception_value::TOO_MANY_RETRIES, fmt::format("Maximum number of retries exceeded ({}).", _maxRetries));
+	  throw ai_exception(ai_exception_value::TOO_MANY_RETRIES,
+			     fmt::format("Maximum number of retries exceeded ({}).", _maxRetries));
 	}
 	try {
 	  json j;
@@ -99,9 +97,22 @@ namespace ai {
 	  //	  std::cerr << _total_tokens << std::endl;
 	  response_json = json::parse(_result);
 	  break;
-	} catch (nlohmann::json_abi_v3_11_2::detail::parse_error& pe) {
+	}
+	catch (std::runtime_error& e) {
+	  std::string msg(e.what());
+	  // If we find "API key" in the message, we assume we had an invalid key.
+	  if (msg.find("API key") != std::string::npos) {
+	    throw ai_exception(ai_exception_value::INVALID_KEY,
+			       fmt::format("The API key ({}) was invalid.", _key.c_str()));
+	  } else {
+	    // Otherwise, pass up the exception.
+	    throw e;
+	  }
+	}
+	catch (nlohmann::json_abi_v3_11_2::detail::parse_error& pe) {
 	  // Retry if there were JSON parse errors.
-	} catch (nlohmann::json_abi_v3_11_2::detail::type_error& te) {
+	}
+	catch (nlohmann::json_abi_v3_11_2::detail::type_error& te) {
 	  // Retry if there were JSON parse errors.
 	}
 	retries -= 1;
@@ -118,7 +129,6 @@ namespace ai {
     std::string _model;
     std::string _result;
     OpenAI _ai;
-    bool _started = false;
     unsigned int _maxRetries;
     unsigned int _completion_tokens = 0;
     unsigned int _prompt_tokens = 0;
