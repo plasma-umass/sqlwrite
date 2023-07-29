@@ -12,9 +12,16 @@ namespace ai {
   enum class ai_config { GPT_35 = 1, GPT_4 = 2 };
   enum class ai_exception_value { NO_KEY_DEFINED, INVALID_KEY, TOO_MANY_RETRIES };
 
+  class ai_stats {
+  public:
+    unsigned int completion_tokens = 0;
+    unsigned int prompt_tokens = 0;
+    unsigned int total_tokens = 0;
+  };
+
   class ai_exception {
   public:
-    ai_exception(ai_exception_value e, const std::string& msg) {
+    explicit ai_exception(ai_exception_value e, const std::string& msg) {
       _exception = e;
       _msg = msg;
     }
@@ -75,6 +82,12 @@ namespace ai {
       return *this;
     }
 
+    // Overload >> operator to save stats
+    ai_stream& operator>>(ai_stats& stats) {
+      stats = _stats;
+      return *this;
+    }
+      
     // Overload >> operator to read responses
     ai_stream& operator>>(json& response_json) {
       response_json = {{}};
@@ -91,9 +104,9 @@ namespace ai {
 	  // std::cout << "CHAT " << j.dump() << std::endl;
 	  auto chat = openai::chat().create(j);
 	  _result = chat["choices"][0]["message"]["content"].get<std::string>();
-	  _completion_tokens += chat["usage"]["completion_tokens"].get<unsigned int>();
-	  _prompt_tokens += chat["usage"]["prompt_tokens"].get<unsigned int>();
-	  _total_tokens += chat["usage"]["total_tokens"].get<unsigned int>();
+	  _stats.completion_tokens += chat["usage"]["completion_tokens"].get<unsigned int>();
+	  _stats.prompt_tokens += chat["usage"]["prompt_tokens"].get<unsigned int>();
+	  _stats.total_tokens += chat["usage"]["total_tokens"].get<unsigned int>();
 	  //	  std::cerr << _total_tokens << std::endl;
 	  response_json = json::parse(_result);
 	  break;
@@ -130,9 +143,7 @@ namespace ai {
     std::string _result;
     OpenAI _ai;
     unsigned int _maxRetries;
-    unsigned int _completion_tokens = 0;
-    unsigned int _prompt_tokens = 0;
-    unsigned int _total_tokens = 0;
+    ai_stats _stats;
   };
 
 }
