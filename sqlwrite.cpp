@@ -63,11 +63,15 @@ std::string removeEscapedNewlines(const std::string& s) {
 }
 
 static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **argv) {
+
+  /* ---- build a query prompt to translate from natural language to SQL. ---- */
+  // The prompt consists of all table names and schemas, plus any indexes, along with directions.
+  
   // Print all loaded database schemas
   sqlite3 *db = sqlite3_context_db_handle(ctx);
   sqlite3_stmt *stmt;
 
-  auto query = fmt::format("Given a database with the following tables, schemas, and indexes, write a SQL query in SQLite's SQL dialect that answers this question or produces the desired report: '{}'. Produce a JSON object with the SQL query as a field \"SQL\". Offer a list of suggestions as SQL commands to create indexes that would improve query performance in a field \"Indexing\". Do so only if those indexes are not already given in 'Existing indexes'. Only produce output that can be parsed as JSON.\n\nSchemas:\n", (const char *) sqlite3_value_text(argv[0]));
+  auto nl_to_sql = fmt::format("Given a database with the following tables, schemas, and indexes, write a SQL query in SQLite's SQL dialect that answers this question or produces the desired report: '{}'. Produce a JSON object with the SQL query as a field \"SQL\". Offer a list of suggestions as SQL commands to create indexes that would improve query performance in a field \"Indexing\". Do so only if those indexes are not already given in 'Existing indexes'. Only produce output that can be parsed as JSON.\n\nSchemas:\n", (const char *) sqlite3_value_text(argv[0]));
   
   sqlite3_prepare_v2(db, "SELECT name, sql FROM sqlite_master WHERE type='table' OR type='view'", -1, &stmt, NULL);
 
@@ -76,7 +80,7 @@ static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
   while (sqlite3_step(stmt) == SQLITE_ROW) {
     const char *name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
     const char *sql = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
-    query += fmt::format("Schema for {}: {}\n", name, sql);
+    nl_to_sql += fmt::format("Schema for {}: {}\n", name, sql);
     total_tables++;
   }
 
@@ -93,13 +97,13 @@ static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
   sqlite3_prepare_v2(db, "SELECT type, name, tbl_name, sql FROM sqlite_master WHERE type='index'", -1, &stmt, NULL);
   while (sqlite3_step(stmt) == SQLITE_ROW) {
     if (!printed_index_header) {
-      query += "\n\nExisting indexes:\n";
+      nl_to_sql += "\n\nExisting indexes:\n";
       printed_index_header = true;
     }
     try {
       const char *tbl_name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
       const char *sql = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
-      query += fmt::format("Index for {}: {}\n", tbl_name, sql);
+      nl_to_sql += fmt::format("Index for {}: {}\n", tbl_name, sql);
     } catch (fmt::v9::format_error& fe) {
       // Ignore indices where the query response is null, which could get us here.
     }
@@ -109,6 +113,8 @@ static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
 
   ai << ai::ai_config::GPT_35;
   
+  /* ----  translate the natural language query to SQL and execute it (and request indexes) ---- */
+  
   ai << json({
       { "role", "assistant" },
 	{ "content", "You are a programming assistant who is an expert in generating SQL queries from natural language. You ONLY respond with JSON objects." }
@@ -116,7 +122,7 @@ static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
 
   ai << json({
       { "role", "user" },
-	{ "content", query.c_str() }
+	{ "content", nl_to_sql.c_str() }
     });
  
   std::string sql_translation;
@@ -162,6 +168,8 @@ static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
     }
   }
 
+  /* ----  translate the SQL query back to natural language ---- */
+  
   ai.clearHistory();
   ai << json({
       { "role", "assistant" },
@@ -184,6 +192,9 @@ static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
   ai >> json_result;
   auto translation = json_result["Translation"].get<std::string>();
   std::cout << fmt::format("[SQLwrite] translation of SQL query back to natural language: {}\n", translation.c_str());
+
+  /* ---- get N translations from natural language to compare results ---- */
+  // TODO
   
   sqlite3_finalize(stmt);
 }
