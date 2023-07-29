@@ -4,7 +4,7 @@
  
   by Emery Berger <https://emeryberger.com>
 
-  Translates English-language queries to SQL.
+  Translates natural-language queries to SQL.
   
 */
 
@@ -19,6 +19,7 @@
 
 #include "openai.hpp"
 #include "sqlite3ext.h"
+#include "aistream.hpp"
 
 SQLITE_EXTENSION_INIT1;
 
@@ -104,46 +105,42 @@ static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
     }
   }
 
-  nlohmann::json prompt;
-  prompt["model"] = "gpt-3.5-turbo";
-  nlohmann::json chat_message;
-  chat_message["role"] = "assistant";
-  chat_message["content"] = "You are a programming assistant who is an expert in generating SQL queries from natural language. You ONLY respond with JSON objects.";
-  prompt["messages"].push_back(chat_message);
-  chat_message["role"] = "user";
-  chat_message["content"] = query;
-  prompt["messages"].push_back(chat_message);
- 
-  auto prompt_str = prompt.dump();
+  ai::ai_stream ai ({ .maxRetries = 3 });
 
-  // std::cout << prompt_str << std::endl;
+  ai << ai::ai_config::GPT_35;
+  
+  ai << json({
+      { "role", "assistant" },
+	{ "content", "You are a programming assistant who is an expert in generating SQL queries from natural language. You ONLY respond with JSON objects." }
+    });
+
+  ai << json({
+      { "role", "user" },
+	{ "content", query.c_str() }
+    });
+ 
+  std::string sql_translation;
   
   int attemptsRemaining = 3;
   while (attemptsRemaining) {
     try {
-      auto chat = openai::chat().create(prompt); // prompt_str.c_str());
-      /// nlohmann::json result = nlohmann::json::parse("{\n    \"SQL\": \"SELECT ArtistId FROM Artists WHERE ArtistName = 'Primus';\",\n    \"Indexing\": {\n        \"Artists\": [\"ArtistName\"]\n    }\n}");
-      auto result = chat["choices"][0]["message"]["content"].get<std::string>();
-      // std::cout << "attempting to parse." << std::endl;
-      auto json_result = nlohmann::json::parse(result);
-      // std::cout << json_result.dump() << std::endl;
+      json json_result;
+      ai >> json_result;
       
-      std::string output;
-
       //std::cout << "SQL:" << std::endl;
       //std::cout << json_result["SQL"].get<std::string>() << std::endl;
       //std::cout << "Indexing:" << std::endl;
       //std::cout << json_result["Indexing"].dump() << std::endl;
-
+      
       // TODO: subtract set of indexing results from already-indexed columns, and present to user as suggestions
       
-      output = json_result["SQL"].get<std::string>();
+      sql_translation = json_result["SQL"].get<std::string>();
       // Remove any escaped newlines.
-      output = removeEscapedNewlines(output);
-      output = removeEscapedCharacters(output);
-
+      sql_translation = removeEscapedNewlines(sql_translation);
+      sql_translation = removeEscapedCharacters(sql_translation);
+      
       // Send the query to the database.
-      auto rc = sqlite3_exec(db, output.c_str(), print_em, nullptr, nullptr);
+      auto rc = sqlite3_exec(db, sql_translation.c_str(), print_em, nullptr, nullptr);
       
       if (rc != SQLITE_OK) {
 	std::cerr << fmt::format("[SQLwrite] Error executing SQL statement: {}\n", sqlite3_errmsg(db));
@@ -155,8 +152,8 @@ static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
 	attemptsRemaining--;
 	continue;
       }
-      std::cout << fmt::format("[SQLwrite] translation to SQL: {}\n", output.c_str());
-
+      std::cout << fmt::format("[SQLwrite] translation to SQL: {}\n", sql_translation.c_str());
+      
       if (json_result["Indexing"].size() > 0) {
 	std::cout << "[SQLwrite] indexing suggestions to improve the performance for this query:" << std::endl;
 	int i = 0;
@@ -166,8 +163,39 @@ static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
 	}
       }
       break;
+    } catch (nlohmann::json_abi_v3_11_2::detail::parse_error& pe) {
+      // Retry if there were JSON parse errors.
+    } catch (nlohmann::json_abi_v3_11_2::detail::type_error& te) {
+      // Retry if there were JSON parse errors.
+    } catch (fmt::v9::format_error& fe) {
+      std::cerr << "error: " << fe.what() << std::endl;
+      // Retry if there is a format error.
     } catch (std::runtime_error& re) {
       std::cout << fmt::format("Runtime error: {}\n", re.what());
+      break;
+    }
+  }
+
+  ai.clearHistory();
+  ai << json({
+      { "role", "assistant" },
+	{ "content", "You are a programming assistant who is an expert in translating SQL queries to natural language. You ONLY respond with JSON objects." }
+    });
+
+  auto translate_to_natural_language_query = fmt::format("Given the following SQL query, convert it into natural language: '{}'. Produce a JSON object with the translation as a field \"Translation\". Only produce output that can be parsed as JSON.\n", sql_translation);
+  ai << json({
+      { "role", "user" },
+      { "content", translate_to_natural_language_query.c_str() }
+    });
+
+  std::string translation;
+  attemptsRemaining = 3;
+  while (attemptsRemaining) {
+    try {
+      json json_result;
+      ai >> json_result;
+      translation = json_result["Translation"].get<std::string>();
+      std::cout << fmt::format("[SQLwrite] translation of SQL query back to natural language: {}\n", translation.c_str());
       break;
     } catch (nlohmann::json_abi_v3_11_2::detail::parse_error& pe) {
       // Retry if there were JSON parse errors.
@@ -176,11 +204,15 @@ static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
     } catch (fmt::v9::format_error& fe) {
       std::cerr << "error: " << fe.what() << std::endl;
       // Retry if there is a format error.
+    } catch (std::runtime_error& re) {
+      std::cout << fmt::format("Runtime error: {}\n", re.what());
+      break;
     }
+    attemptsRemaining--;
   }
+  
   sqlite3_finalize(stmt);
 }
-
      
 static void ask_command(sqlite3_context *ctx, int argc, sqlite3_value **argv) {
   if (argc != 1) {
