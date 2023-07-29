@@ -38,6 +38,8 @@
 using namespace nlohmann;
 using namespace openai;
 
+#include <functional>
+
 namespace ai {
   
   enum class ai_config { GPT_35 = 1, GPT_4 = 2 };
@@ -50,6 +52,16 @@ namespace ai {
     unsigned int total_tokens = 0;
   };
 
+  class ai_validate {
+  public:
+    explicit ai_validate(bool validator(const json&))
+      : validator (validator)
+    {
+    }
+    std::function<bool(const json&)> validator = [](const json&){ return true; };
+  };
+  
+  
   class ai_exception {
   public:
     explicit ai_exception(ai_exception_value e, const std::string& msg) {
@@ -109,6 +121,12 @@ namespace ai {
       return *this;
     }
   
+    // Overload << operator for validation
+    ai_stream& operator<<(const ai_validate& v) {
+      _validator = v.validator;
+      return *this;
+    }
+  
     // Overload << operator to send queries
     ai_stream& operator<<(const json& js) {
       _messages.push_back(js);
@@ -134,15 +152,21 @@ namespace ai {
 	  json j;
 	  j["model"] = _model;
 	  j["messages"] = _messages;
-	  // std::cout << "CHAT " << j.dump() << std::endl;
 	  auto chat = openai::chat().create(j);
 	  _result = chat["choices"][0]["message"]["content"].get<std::string>();
 	  _stats.completion_tokens += chat["usage"]["completion_tokens"].get<unsigned int>();
 	  _stats.prompt_tokens += chat["usage"]["prompt_tokens"].get<unsigned int>();
 	  _stats.total_tokens += chat["usage"]["total_tokens"].get<unsigned int>();
-	  //	  std::cerr << _total_tokens << std::endl;
 	  response_json = json::parse(_result);
-	  break;
+	  if (_validator(response_json)) {
+	    break;
+	  }
+	}
+	catch (nlohmann::json_abi_v3_11_2::detail::parse_error& pe) {
+	  // Retry if there were JSON parse errors.
+	}
+	catch (nlohmann::json_abi_v3_11_2::detail::type_error& te) {
+	  // Retry if there were JSON parse errors.
 	}
 	catch (std::runtime_error& e) {
 	  std::string msg(e.what());
@@ -154,12 +178,6 @@ namespace ai {
 	    // Otherwise, pass up the exception.
 	    throw e;
 	  }
-	}
-	catch (nlohmann::json_abi_v3_11_2::detail::parse_error& pe) {
-	  // Retry if there were JSON parse errors.
-	}
-	catch (nlohmann::json_abi_v3_11_2::detail::type_error& te) {
-	  // Retry if there were JSON parse errors.
 	}
 	retries -= 1;
 	std::cerr << "Retry." << std::endl;
@@ -183,6 +201,7 @@ namespace ai {
     const std::string _apiKey;
     const std::string _keyName;
     ai_stats _stats;
+    std::function<bool(const json&)> _validator = [](const json&){ return true; };
   };
 
 }
