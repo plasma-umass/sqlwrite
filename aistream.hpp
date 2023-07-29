@@ -4,6 +4,37 @@
 #include "openai.hpp"
 #include "json.hpp"
 
+/*
+
+  Example usage:
+
+  using namespace ai;
+  std::string assistant_msg("You are a programming assistant who ONLY responds with JSON objects.");
+  std::string query("Your query goes here");
+  try {
+    ai_stream ai({.maxRetries = 3 });
+    ai << ai_config::GPT_35
+       << json({
+	   {"role", "assistant"},
+	   {"content", assistant_msg.c_str()}
+	 })
+       << json({
+	   {"role", "user"},
+	   {"content", query.c_str()}
+	 });
+    json j;
+    ai >> j; // performs query
+    std::cout << "j = " << j.dump() << std::endl;
+    ai_stats stats;
+    ai >> stats;
+    std::cout << "total tokens = " << stats.total_tokens << std::endl;
+    
+  } catch (const ai_exception& e) {
+    std::cerr << e.what() << std::endl;
+  }
+  
+ */
+
 using namespace nlohmann;
 using namespace openai;
 
