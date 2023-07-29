@@ -72,13 +72,15 @@ namespace ai {
       const unsigned int maxRetries = 3;
     };
     explicit ai_stream(params p)
+      : _maxRetries (p.maxRetries),
+	_apiKey (p.apiKey),
+	_keyName (p.keyName)
     {
       openai::start();
-      _key = p.apiKey;
-      _maxRetries = p.maxRetries;
+      _key = _apiKey;
       if (_key == "") {
 	// Try to fetch the key from the environment if no key was provided.
-	std::string envKey(std::getenv(p.keyName.c_str()));
+	std::string envKey(std::getenv(_keyName.c_str()));
 	if (envKey != "") {
 	  _key = envKey;
 	}
@@ -88,7 +90,7 @@ namespace ai {
       // Throw exception if no key found or provided.
       if (_key == "") {
 	throw ai_exception(ai_exception_value::NO_KEY_DEFINED,
-			   fmt::format("There was no key defined in the constructor or in the environment variable {}.", p.keyName.c_str()));
+			   fmt::format("There was no key defined in the constructor or in the environment variable {}.", _keyName.c_str()));
       }
     }
 
@@ -162,9 +164,13 @@ namespace ai {
 	retries -= 1;
 	std::cerr << "Retry." << std::endl;
       }
+      return *this;
+    }
+
+    void clearHistory() {
+      // Clears chat history.
       _result = "";
       _messages.clear();
-      return *this;
     }
   
   private:
@@ -173,7 +179,9 @@ namespace ai {
     std::string _model;
     std::string _result;
     OpenAI _ai;
-    unsigned int _maxRetries;
+    const unsigned int _maxRetries;
+    const std::string _apiKey;
+    const std::string _keyName;
     ai_stats _stats;
   };
 
