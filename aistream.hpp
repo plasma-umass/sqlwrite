@@ -54,7 +54,7 @@ namespace ai {
 
   class ai_validate {
   public:
-    explicit ai_validate(bool validator(const json&))
+    explicit ai_validate(std::function<bool(const json&)> validator)
       : validator (validator)
     {
     }
