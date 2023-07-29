@@ -187,29 +187,18 @@ static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
       { "role", "user" },
       { "content", translate_to_natural_language_query.c_str() }
     });
-
-  std::string translation;
-  attemptsRemaining = 3;
-  while (attemptsRemaining) {
+  ai << ai::ai_validate([](const json& json_result){
     try {
-      json json_result;
-      ai >> json_result;
-      translation = json_result["Translation"].get<std::string>();
-      std::cout << fmt::format("[SQLwrite] translation of SQL query back to natural language: {}\n", translation.c_str());
-      break;
-    } catch (nlohmann::json_abi_v3_11_2::detail::parse_error& pe) {
-      // Retry if there were JSON parse errors.
-    } catch (nlohmann::json_abi_v3_11_2::detail::type_error& te) {
-      // Retry if there were JSON parse errors.
-    } catch (fmt::v9::format_error& fe) {
-      std::cerr << "error: " << fe.what() << std::endl;
-      // Retry if there is a format error.
-    } catch (std::runtime_error& re) {
-      std::cout << fmt::format("Runtime error: {}\n", re.what());
-      break;
+      auto translation = json_result["Translation"].get<std::string>();
+      return true;
+    } catch (std::exception& e) {
+      return false;
     }
-    attemptsRemaining--;
-  }
+  });
+  json json_result;
+  ai >> json_result;
+  auto translation = json_result["Translation"].get<std::string>();
+  std::cout << fmt::format("[SQLwrite] translation of SQL query back to natural language: {}\n", translation.c_str());
   
   sqlite3_finalize(stmt);
 }
