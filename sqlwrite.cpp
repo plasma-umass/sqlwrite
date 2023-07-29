@@ -121,58 +121,44 @@ static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
  
   std::string sql_translation;
   
-  int attemptsRemaining = 3;
-  while (attemptsRemaining) {
+  ai << ai::ai_validate([&](const json& j) {
     try {
-      json json_result;
-      ai >> json_result;
-      
-      //std::cout << "SQL:" << std::endl;
-      //std::cout << json_result["SQL"].get<std::string>() << std::endl;
-      //std::cout << "Indexing:" << std::endl;
-      //std::cout << json_result["Indexing"].dump() << std::endl;
-      
-      // TODO: subtract set of indexing results from already-indexed columns, and present to user as suggestions
-      
-      sql_translation = json_result["SQL"].get<std::string>();
-      // Remove any escaped newlines.
-      sql_translation = removeEscapedNewlines(sql_translation);
-      sql_translation = removeEscapedCharacters(sql_translation);
-      
-      // Send the query to the database.
-      auto rc = sqlite3_exec(db, sql_translation.c_str(), print_em, nullptr, nullptr);
-      
-      if (rc != SQLITE_OK) {
-	std::cerr << fmt::format("[SQLwrite] Error executing SQL statement: {}\n", sqlite3_errmsg(db));
-	if (attemptsRemaining == 0) {
-	  sqlite3_finalize(stmt);
-	  return;
-	}
-	std::cerr << "[SQLwrite] Retrying..." << std::endl;
-	attemptsRemaining--;
-	continue;
+      // Ensure we got a SQL response.
+      sql_translation = j["SQL"].get<std::string>();
+      // Iterate through indexes to ensure validity.
+      for (auto& item : j["Indexing"]) {
+	volatile auto item_test = item.get<std::string>();
       }
-      std::cout << fmt::format("[SQLwrite] translation to SQL: {}\n", sql_translation.c_str());
-      
-      if (json_result["Indexing"].size() > 0) {
-	std::cout << "[SQLwrite] indexing suggestions to improve the performance for this query:" << std::endl;
-	int i = 0;
-	for (auto& item : json_result["Indexing"]) {
-	  i++;
-	  std::cout << fmt::format("({}): {}\n", i, item.get<std::string>());
-	}
-      }
-      break;
-    } catch (nlohmann::json_abi_v3_11_2::detail::parse_error& pe) {
-      // Retry if there were JSON parse errors.
-    } catch (nlohmann::json_abi_v3_11_2::detail::type_error& te) {
-      // Retry if there were JSON parse errors.
-    } catch (fmt::v9::format_error& fe) {
-      std::cerr << "error: " << fe.what() << std::endl;
-      // Retry if there is a format error.
-    } catch (std::runtime_error& re) {
-      std::cout << fmt::format("Runtime error: {}\n", re.what());
-      break;
+    } catch (std::exception& e) {
+      return false;
+    }
+    // Remove any escaped newlines.
+    sql_translation = removeEscapedNewlines(sql_translation);
+    sql_translation = removeEscapedCharacters(sql_translation);
+    
+    // Send the query to the database.
+    auto rc = sqlite3_exec(db, sql_translation.c_str(), [](void*, int, char**, char**) {return 0;}, nullptr, nullptr);
+    if (rc != SQLITE_OK) {
+      std::cerr << fmt::format("[SQLwrite] Error executing SQL statement: {}\n", sqlite3_errmsg(db));
+      // sqlite3_finalize(stmt);
+    }
+    return rc == SQLITE_OK;
+  });
+
+  json json_result;
+  ai >> json_result;
+  
+  // Send the query to the database, printing it this time.
+  auto rc = sqlite3_exec(db, sql_translation.c_str(), print_em, nullptr, nullptr);
+  
+  std::cout << fmt::format("[SQLwrite] translation to SQL: {}\n", sql_translation.c_str());
+  
+  if (json_result["Indexing"].size() > 0) {
+    std::cout << "[SQLwrite] indexing suggestions to improve the performance for this query:" << std::endl;
+    int i = 0;
+    for (auto& item : json_result["Indexing"]) {
+      i++;
+      std::cout << fmt::format("({}): {}\n", i, item.get<std::string>());
     }
   }
 
@@ -195,7 +181,6 @@ static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
       return false;
     }
   });
-  json json_result;
   ai >> json_result;
   auto translation = json_result["Translation"].get<std::string>();
   std::cout << fmt::format("[SQLwrite] translation of SQL query back to natural language: {}\n", translation.c_str());
