@@ -145,7 +145,7 @@ static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
     // Send the query to the database.
     auto rc = sqlite3_exec(db, sql_translation.c_str(), [](void*, int, char**, char**) {return 0;}, nullptr, nullptr);
     if (rc != SQLITE_OK) {
-      std::cerr << fmt::format("[SQLwrite] Error executing SQL statement: {}\n", sqlite3_errmsg(db));
+      std::cerr << fmt::format("[SQLwrite] Error executing SQL statement \"{}\":\n           {}\n", sql_translation.c_str(), sqlite3_errmsg(db));
       // sqlite3_finalize(stmt);
     }
     return rc == SQLITE_OK;
