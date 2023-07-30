@@ -62,6 +62,35 @@ std::string removeEscapedNewlines(const std::string& s) {
     return result;
 }
 
+// Function to rephrase a query using ChatGPT
+std::list<std::string> rephraseQuery(ai::ai_stream& ai, const std::string& query, int n = 10)
+{
+  // Query the ChatGPT model for rephrasing
+  auto promptq = fmt::format("Rephrase the following query {} times, all using different wording. Produce a JSON object with the result as a list with the field \"Rewording\". Query to rephrase: '{}'", n, query);
+
+  ai.reset();
+  ai << json({
+      { "role", "assistant" },
+	{ "content", "You are an assistant who is an expert in rewording natural language expressions. You ONLY respond with JSON objects." }
+    });
+  ai << json({
+      {"role", "user" },
+	{"content", promptq.c_str() }
+    });
+  ai << ai::ai_validator([](const json& j) {
+    // Enforce list output
+    volatile auto list = j["Rewording"].get<std::list<std::string>>();
+    return true;
+  });
+
+  json json_response;
+  ai >> json_response;
+  
+  // Parse the response and extract the rephrased queries
+  auto rephrasedQueries = json_response["Rewording"].get<std::list<std::string>>();
+  return rephrasedQueries;
+}
+
 static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **argv) {
 
   /* ---- build a query prompt to translate from natural language to SQL. ---- */
@@ -109,7 +138,7 @@ static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
     }
   }
 
-  ai::ai_stream ai ({ .maxRetries = 3 });
+  ai::ai_stream ai ({ .maxRetries = 3 }); // , .debug = true });
 
   ai << ai::ai_config::GPT_35;
   
@@ -127,7 +156,7 @@ static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
  
   std::string sql_translation;
   
-  ai << ai::ai_validate([&](const json& j) {
+  ai << ai::ai_validator([&](const json& j) {
     try {
       // Ensure we got a SQL response.
       sql_translation = j["SQL"].get<std::string>();
@@ -170,7 +199,7 @@ static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
 
   /* ----  translate the SQL query back to natural language ---- */
   
-  ai.clearHistory();
+  ai.reset();
   ai << json({
       { "role", "assistant" },
 	{ "content", "You are a programming assistant who is an expert in translating SQL queries to natural language. You ONLY respond with JSON objects." }
@@ -181,7 +210,7 @@ static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
       { "role", "user" },
       { "content", translate_to_natural_language_query.c_str() }
     });
-  ai << ai::ai_validate([](const json& json_result){
+  ai << ai::ai_validator([](const json& json_result){
     try {
       auto translation = json_result["Translation"].get<std::string>();
       return true;
@@ -194,6 +223,11 @@ static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
   std::cout << fmt::format("[SQLwrite] translation of SQL query back to natural language: {}\n", translation.c_str());
 
   /* ---- get N translations from natural language to compare results ---- */
+  auto rewordings = rephraseQuery(ai, sql_translation, 10);
+  for (auto& w : rewordings) {
+    std::cout << "Rewording: " << w << std::endl;
+  }
+  
   // TODO
   
   sqlite3_finalize(stmt);
