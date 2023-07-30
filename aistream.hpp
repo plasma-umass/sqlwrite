@@ -42,7 +42,7 @@ using namespace openai;
 
 namespace ai {
   
-  enum class ai_config { GPT_35 = 1, GPT_4 = 2 };
+  enum class ai_config { GPT_35, GPT_4 };
   enum class ai_exception_value { NO_KEY_DEFINED, INVALID_KEY, TOO_MANY_RETRIES };
 
   class ai_stats {
@@ -52,9 +52,9 @@ namespace ai {
     unsigned int total_tokens = 0;
   };
 
-  class ai_validate {
+  class ai_validator {
   public:
-    explicit ai_validate(std::function<bool(const json&)> validator)
+    explicit ai_validator(std::function<bool(const json&)> validator)
       : validator (validator)
     {
     }
@@ -82,11 +82,13 @@ namespace ai {
       const std::string& apiKey = "";
       const std::string& keyName = "OPENAI_API_KEY";
       const unsigned int maxRetries = 3;
+      const bool debug = false;
     };
     explicit ai_stream(params p)
       : _maxRetries (p.maxRetries),
 	_apiKey (p.apiKey),
-	_keyName (p.keyName)
+	_keyName (p.keyName),
+	_debug (p.debug)
     {
       openai::start();
       _key = _apiKey;
@@ -122,7 +124,7 @@ namespace ai {
     }
   
     // Overload << operator for validation
-    ai_stream& operator<<(const ai_validate& v) {
+    ai_stream& operator<<(const ai_validator& v) {
       _validator = v.validator;
       return *this;
     }
@@ -152,8 +154,14 @@ namespace ai {
 	  json j;
 	  j["model"] = _model;
 	  j["messages"] = _messages;
+	  if (_debug) {
+	    std::cerr << "Sending: " << j.dump() << std::endl;
+	  }
 	  auto chat = openai::chat().create(j);
 	  _result = chat["choices"][0]["message"]["content"].get<std::string>();
+	  if (_debug) {
+	    std::cerr << "Received: " << _result << std::endl;
+	  }
 	  _stats.completion_tokens += chat["usage"]["completion_tokens"].get<unsigned int>();
 	  _stats.prompt_tokens += chat["usage"]["prompt_tokens"].get<unsigned int>();
 	  _stats.total_tokens += chat["usage"]["total_tokens"].get<unsigned int>();
@@ -164,9 +172,11 @@ namespace ai {
 	}
 	catch (nlohmann::json_abi_v3_11_2::detail::parse_error& pe) {
 	  // Retry if there were JSON parse errors.
+	  std::cerr << "JSON parse error 1." << std::endl;
 	}
 	catch (nlohmann::json_abi_v3_11_2::detail::type_error& te) {
 	  // Retry if there were JSON parse errors.
+	  std::cerr << "JSON parse error 2." << std::endl;
 	}
 	catch (std::runtime_error& e) {
 	  std::string msg(e.what());
@@ -185,10 +195,11 @@ namespace ai {
       return *this;
     }
 
-    void clearHistory() {
-      // Clears chat history.
+    void reset() {
+      // Clears chat history and validator.
       _result = "";
       _messages.clear();
+      _validator = [](const json&) { return true; };
     }
   
   private:
@@ -200,6 +211,7 @@ namespace ai {
     const unsigned int _maxRetries;
     const std::string _apiKey;
     const std::string _keyName;
+    const bool _debug;
     ai_stats _stats;
     std::function<bool(const json&)> _validator = [](const json&){ return true; };
   };
