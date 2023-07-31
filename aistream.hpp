@@ -13,7 +13,7 @@
   std::string query("Your query goes here");
   try {
     ai_stream ai({.maxRetries = 3 });
-    ai << ai_config::GPT_35
+    ai << ai_config::GPT_3_5
        << json({
 	   {"role", "assistant"},
 	   {"content", assistant_msg.c_str()}
@@ -42,7 +42,7 @@ using namespace openai;
 
 namespace ai {
   
-  enum class ai_config { GPT_35, GPT_4 };
+  enum class ai_config { GPT_3_5, GPT_4_0 };
   enum class ai_exception_value { NO_KEY_DEFINED, INVALID_KEY, TOO_MANY_RETRIES };
 
   class ai_stats {
@@ -111,11 +111,11 @@ namespace ai {
     // Overload << operator for configuration
     ai_stream& operator<<(const ai_config& config) {
       switch (config) {
-      case ai_config::GPT_35:
+      case ai_config::GPT_3_5:
 	_model = "gpt-3.5-turbo";
 	// std::cout << "GPT 3.5" << std::endl;
 	break;
-      case ai_config::GPT_4:
+      case ai_config::GPT_4_0:
 	_model = "gpt-4.0";
 	// std::cout << "GPT 4" << std::endl;
 	break;
@@ -172,11 +172,15 @@ namespace ai {
 	}
 	catch (nlohmann::json_abi_v3_11_2::detail::parse_error& pe) {
 	  // Retry if there were JSON parse errors.
-	  std::cerr << "JSON parse error 1." << std::endl;
+	  if (_debug) {
+	    std::cerr << "JSON parse error." << std::endl;
+	  }
 	}
 	catch (nlohmann::json_abi_v3_11_2::detail::type_error& te) {
 	  // Retry if there were JSON parse errors.
-	  std::cerr << "JSON parse error 2." << std::endl;
+	  if (_debug) {
+	    std::cerr << "JSON parse error." << std::endl;
+	  }
 	}
 	catch (std::runtime_error& e) {
 	  std::string msg(e.what());
@@ -190,7 +194,9 @@ namespace ai {
 	  }
 	}
 	retries -= 1;
-	std::cerr << "Retry." << std::endl;
+	if (_debug) {
+	  std::cerr << "Retry." << std::endl;
+	}
       }
       return *this;
     }
