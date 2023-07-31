@@ -12,7 +12,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <sqlite3.h>
+
 #include <string>
+#include <vector>
+
+#include <openssl/sha.h>
+#include <openssl/evp.h>
 
 #include <fmt/core.h>
 #include <fmt/format.h>
@@ -22,9 +28,6 @@
 #include "aistream.hpp"
 
 SQLITE_EXTENSION_INIT1;
-
-#include <openssl/sha.h>
-#include <openssl/evp.h>
 
 // Function to calculate SHA256 hash of a string
 std::string calculateSHA256Hash(const std::string& input) {
@@ -124,6 +127,52 @@ std::string removeEscapedNewlines(const std::string& s) {
     return result;
 }
 
+
+nlohmann::json sampleSQLiteDistinct(sqlite3* DB, int N) {
+    nlohmann::json result;
+
+    // Query for all tables in the database
+    std::string tables_query = "SELECT name FROM sqlite_master WHERE type='table';";
+    sqlite3_stmt* stmt;
+    sqlite3_prepare_v2(DB, tables_query.c_str(), -1, &stmt, 0);
+
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        std::string table_name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
+
+        // Query for column names in current table
+        std::string columns_query = fmt::format("PRAGMA table_info({});", table_name);
+        sqlite3_stmt* column_stmt;
+        sqlite3_prepare_v2(DB, columns_query.c_str(), -1, &column_stmt, 0);
+
+        while (sqlite3_step(column_stmt) == SQLITE_ROW) {
+            std::string column_name = reinterpret_cast<const char*>(sqlite3_column_text(column_stmt, 1));
+
+            // Query for N random distinct values from current column
+            std::string values_query = fmt::format("SELECT DISTINCT {} FROM {} ORDER BY RANDOM() LIMIT {};", column_name, table_name, N);
+            sqlite3_stmt* values_stmt;
+            sqlite3_prepare_v2(DB, values_query.c_str(), -1, &values_stmt, 0);
+
+	    std::vector<std::string> column_values;
+	    while (sqlite3_step(values_stmt) == SQLITE_ROW) {
+	      const char* data = reinterpret_cast<const char*>(sqlite3_column_text(values_stmt, 0));
+	      if (data != nullptr) {
+		column_values.push_back(data);
+	      } else {
+		column_values.push_back("NULL");  // Or however you want to represent null values
+	      }
+	    }
+
+            result[table_name][column_name] = column_values;
+            sqlite3_finalize(values_stmt);
+        }
+        sqlite3_finalize(column_stmt);
+    }
+    sqlite3_finalize(stmt);
+
+    return result;
+}
+
+
 // Function to rephrase a query using ChatGPT
 std::list<std::string> rephraseQuery(ai::ai_stream& ai, const std::string& query, int n = 10)
 {
@@ -168,7 +217,9 @@ static bool translateQuery(ai::ai_stream& ai,
   sqlite3 *db = sqlite3_context_db_handle(ctx);
   sqlite3_stmt *stmt;
 
-  auto nl_to_sql = fmt::format("Given a database with the following tables, schemas, and indexes, write a SQL query in SQLite's SQL dialect that answers this question or produces the desired report: '{}'. Produce a JSON object with the SQL query as a field \"SQL\". Offer a list of suggestions as SQL commands to create indexes that would improve query performance in a field \"Indexing\". Do so only if those indexes are not already given in 'Existing indexes'. Only produce output that can be parsed as JSON.\n\nSchemas:\n", query);
+  // auto nl_to_sql = fmt::format("Given a database with the following tables, schemas, and indexes, write a SQL query in SQLite's SQL dialect that answers this question or produces the desired report: '{}'. Produce a JSON object with the SQL query as a field \"SQL\". Offer a list of suggestions as SQL commands to create indexes that would improve query performance in a field \"Indexing\". Do so only if those indexes are not already given in 'Existing indexes'. Only produce output that can be parsed as JSON.\n\nSchemas:\n", query);
+  
+  auto nl_to_sql = fmt::format("Given a database with the following tables, schemas, indexes, and samples for each column, write a SQL query in SQLite's SQL dialect that answers this question or produces the desired report: '{}'. Produce a JSON object with the SQL query as a field \"SQL\". Offer a list of suggestions as SQL commands to create indexes that would improve query performance in a field \"Indexing\". Do so only if those indexes are not already given in 'Existing indexes'. Only produce output that can be parsed as JSON.\n\nSchemas:\n", query);
   
   sqlite3_prepare_v2(db, "SELECT name, sql FROM sqlite_master WHERE type='table' OR type='view'", -1, &stmt, NULL);
 
@@ -206,6 +257,10 @@ static bool translateQuery(ai::ai_stream& ai,
     }
   }
 
+  // Randomly sample values from the database.
+  auto sample_value_json = sampleSQLiteDistinct(db, 5); // magic number FIXME
+  nl_to_sql += fmt::format("\nSample values for each column: {}\n", sample_value_json.dump());
+  
   /* ----  translate the natural language query to SQL and execute it (and request indexes) ---- */
   
   ai << json({
@@ -254,7 +309,8 @@ static void real_ask_command(sqlite3_context *ctx, int argc, const char * query)
   json json_result;
   std::string sql_translation;
   
-  ai::ai_stream ai ({ .maxRetries = 3 }); // , .debug = true });
+  // ai::ai_stream ai ({ .maxRetries = 3 , .debug = true });
+  ai::ai_stream ai ({ .maxRetries = 3 });
 
   ai << ai::ai_config::GPT_3_5;
   
