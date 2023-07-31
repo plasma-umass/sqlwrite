@@ -1,7 +1,7 @@
 LIBNAME := sqlwrite
 OPTIMIZATION := # -O3
 CXXFLAGS := -std=c++17 -g $(OPTIMIZATION) -DNDEBUG -I. -Ifmt/include
-CFLAGS := $(OPTIMIZATION) -DNDEBUG
+CFLAGS := $(OPTIMIZATION) -g -DNDEBUG
 
 ifeq ($(shell uname -s),Darwin)
 LIBFILE := $(LIBNAME).dylib
@@ -16,4 +16,4 @@ endif
 all: *.c *.cpp *.hpp
 	clang++ $(CXXFLAGS) $(DYNAMIC_LIB) -o $(LIBFILE) sqlwrite.cpp fmt/src/format.cc -lcurl -lssl -lcrypto
 	clang $(CFLAGS) $(DYNAMIC_LIB) -o $(SQLITE_LIB) sqlite3.c 
-	clang shell.c -L. -lsqlite3 -o sqlite3
+	clang $(CFLAGS) shell.c -L. -lsqlite3 -o sqlite3
