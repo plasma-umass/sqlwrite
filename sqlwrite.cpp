@@ -23,6 +23,68 @@
 
 SQLITE_EXTENSION_INIT1;
 
+#include <openssl/sha.h>
+#include <openssl/evp.h>
+
+// Function to calculate SHA256 hash of a string
+std::string calculateSHA256Hash(const std::string& input) {
+    unsigned char hash[SHA256_DIGEST_LENGTH];
+    EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
+
+    EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr);
+    EVP_DigestUpdate(mdctx, input.c_str(), input.size());
+    EVP_DigestFinal_ex(mdctx, hash, nullptr);
+
+    EVP_MD_CTX_free(mdctx);
+
+    std::string hashString;
+    for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
+        hashString += fmt::format("{:02x}", hash[i]);
+    }
+
+    return hashString;
+}
+
+// SQLite callback function to retrieve query results
+int callback(void* data, int argc, char** argv, char** /* azColName */) {
+    std::list<std::string>& resultList = *static_cast<std::list<std::string>*>(data);
+
+    for (int i = 0; i < argc; i++) {
+        if (argv[i]) {
+            resultList.push_back(argv[i]);
+        }
+    }
+
+    return 0;
+}
+
+// Function to execute a query using SQLite
+std::list<std::string> executeQuery(const std::string& query) {
+    std::list<std::string> resultList;
+    sqlite3* db;
+    char* errMsg = nullptr;
+
+    // Open the database connection
+    int rc = sqlite3_open(":memory:", &db);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Error opening database: " << sqlite3_errmsg(db) << std::endl;
+        sqlite3_close(db);
+        return resultList;
+    }
+
+    // Execute the query and retrieve the results
+    rc = sqlite3_exec(db, query.c_str(), callback, &resultList, &errMsg);
+    if (rc != SQLITE_OK) {
+        std::cerr << "Error executing query: " << errMsg << std::endl;
+        sqlite3_free(errMsg);
+    }
+
+    // Close the database connection
+    sqlite3_close(db);
+
+    return resultList;
+}
+
 int print_em(void* data, int c_num, char** c_vals, char** c_names) {
     for (int i = 0; i < c_num; i++) {
       std::cout << (c_vals[i] ? c_vals[i] : "NULL");
@@ -66,7 +128,7 @@ std::string removeEscapedNewlines(const std::string& s) {
 std::list<std::string> rephraseQuery(ai::ai_stream& ai, const std::string& query, int n = 10)
 {
   // Query the ChatGPT model for rephrasing
-  auto promptq = fmt::format("Rephrase the following query {} times, all using different wording. Produce a JSON object with the result as a list with the field \"Rewording\". Query to rephrase: '{}'", n, query);
+  auto promptq = fmt::format("Rephrase the following query {} times, all using different wording. Produce a JSON object with the result as a list with the field \"Rewording\". Do not include any SQL in any rewording. Query to rephrase: '{}'", n, query);
 
   ai.reset();
   ai << json({
@@ -91,8 +153,14 @@ std::list<std::string> rephraseQuery(ai::ai_stream& ai, const std::string& query
   return rephrasedQueries;
 }
 
-static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **argv) {
-
+static bool translateQuery(ai::ai_stream& ai,
+			   sqlite3_context *ctx,
+			   int argc,
+			   const char * query,
+			   json& json_response,
+			   std::string& sql_translation)
+{
+  
   /* ---- build a query prompt to translate from natural language to SQL. ---- */
   // The prompt consists of all table names and schemas, plus any indexes, along with directions.
   
@@ -100,7 +168,7 @@ static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
   sqlite3 *db = sqlite3_context_db_handle(ctx);
   sqlite3_stmt *stmt;
 
-  auto nl_to_sql = fmt::format("Given a database with the following tables, schemas, and indexes, write a SQL query in SQLite's SQL dialect that answers this question or produces the desired report: '{}'. Produce a JSON object with the SQL query as a field \"SQL\". Offer a list of suggestions as SQL commands to create indexes that would improve query performance in a field \"Indexing\". Do so only if those indexes are not already given in 'Existing indexes'. Only produce output that can be parsed as JSON.\n\nSchemas:\n", (const char *) sqlite3_value_text(argv[0]));
+  auto nl_to_sql = fmt::format("Given a database with the following tables, schemas, and indexes, write a SQL query in SQLite's SQL dialect that answers this question or produces the desired report: '{}'. Produce a JSON object with the SQL query as a field \"SQL\". Offer a list of suggestions as SQL commands to create indexes that would improve query performance in a field \"Indexing\". Do so only if those indexes are not already given in 'Existing indexes'. Only produce output that can be parsed as JSON.\n\nSchemas:\n", query);
   
   sqlite3_prepare_v2(db, "SELECT name, sql FROM sqlite_master WHERE type='table' OR type='view'", -1, &stmt, NULL);
 
@@ -117,7 +185,7 @@ static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
   if (total_tables == 0) {
     std::cout << "SQLwrite: you need to load a table first." << std::endl;
     sqlite3_finalize(stmt);
-    return;
+    return false;
   }
 
   // Add indexes, if any.
@@ -138,10 +206,6 @@ static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
     }
   }
 
-  ai::ai_stream ai ({ .maxRetries = 3 }); // , .debug = true });
-
-  ai << ai::ai_config::GPT_35;
-  
   /* ----  translate the natural language query to SQL and execute it (and request indexes) ---- */
   
   ai << json({
@@ -153,8 +217,6 @@ static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
       { "role", "user" },
 	{ "content", nl_to_sql.c_str() }
     });
- 
-  std::string sql_translation;
   
   ai << ai::ai_validator([&](const json& j) {
     try {
@@ -182,6 +244,25 @@ static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
 
   json json_result;
   ai >> json_result;
+
+  return true;
+}
+
+static void real_ask_command(sqlite3_context *ctx, int argc, const char * query) { //  sqlite3_value **argv) {
+
+  sqlite3 *db = sqlite3_context_db_handle(ctx);
+  json json_result;
+  std::string sql_translation;
+  
+  ai::ai_stream ai ({ .maxRetries = 3 }); // , .debug = true });
+
+  ai << ai::ai_config::GPT_3_5;
+  
+  bool r = translateQuery(ai, ctx, argc, query, json_result, sql_translation);
+  if (!r) {
+    std::cerr << "[SQLwrite] translation error." << std::endl;
+    return;
+  }
   
   // Send the query to the database, printing it this time.
   auto rc = sqlite3_exec(db, sql_translation.c_str(), print_em, nullptr, nullptr);
@@ -210,34 +291,45 @@ static void real_ask_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
       { "role", "user" },
       { "content", translate_to_natural_language_query.c_str() }
     });
-  ai << ai::ai_validator([](const json& json_result){
+  std::string translation;
+  ai << ai::ai_validator([&](const json& json_result){
     try {
-      auto translation = json_result["Translation"].get<std::string>();
+      translation = json_result["Translation"].get<std::string>();
       return true;
     } catch (std::exception& e) {
       return false;
     }
   });
   ai >> json_result;
-  auto translation = json_result["Translation"].get<std::string>();
-  std::cout << fmt::format("[SQLwrite] translation of SQL query back to natural language: {}\n", translation.c_str());
+  //  auto translation = json_result["Translation"].get<std::string>();
+  std::cout << fmt::format("[SQLwrite] translation back to natural language: {}\n", translation.c_str());
 
+#if 0 // disable temporarily
   /* ---- get N translations from natural language to compare results ---- */
-  auto rewordings = rephraseQuery(ai, sql_translation, 10);
-  for (auto& w : rewordings) {
-    std::cout << "Rewording: " << w << std::endl;
+  const auto N = 10;
+  auto rewordings = rephraseQuery(ai, sql_translation, N);
+  auto values = new const char *[N];
+  int i = 0;
+  for (const auto& w : rewordings) {
+    values[i] = w.c_str();
+    std::cerr << "Rewording " << i << " = " << (const char *) values[i] << std::endl;
+    i++;
   }
-  
-  // TODO
-  
-  sqlite3_finalize(stmt);
+  std::cerr << "Trying " << values[0] << std::endl;
+  auto translated = translateQuery(ai, ctx, 1, values[0], json_result, sql_translation);
+  std::cout << "Done: translated = " << translated << std::endl;
+  // Cleanup allocated values
+  delete [] values;
+#endif
+  //  sqlite3_finalize(stmt);
 }
      
 static void ask_command(sqlite3_context *ctx, int argc, sqlite3_value **argv) {
   if (argc != 1) {
     sqlite3_result_error(ctx, "The 'ask' command takes exactly one argument.", -1);
   }
-  real_ask_command(ctx, argc, argv);
+  auto query = (const char *) sqlite3_value_text(argv[0]);
+  real_ask_command(ctx, argc, query); // argv);
 }
 
 
@@ -245,7 +337,8 @@ static void sqlwrite_command(sqlite3_context *ctx, int argc, sqlite3_value **arg
   if (argc != 1) {
     sqlite3_result_error(ctx, "The 'sqlwrite' command takes exactly one argument.", -1);
   }
-  real_ask_command(ctx, argc, argv);
+  auto query = (const char *) sqlite3_value_text(argv[0]);
+  real_ask_command(ctx, argc, query);
 }
 
 
