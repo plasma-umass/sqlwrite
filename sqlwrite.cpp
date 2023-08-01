@@ -29,6 +29,9 @@
 
 SQLITE_EXTENSION_INIT1;
 
+const bool DEBUG = false;
+
+
 // Function to calculate SHA256 hash of a string
 std::string calculateSHA256Hash(const std::string& input) {
     unsigned char hash[SHA256_DIGEST_LENGTH];
@@ -59,33 +62,6 @@ int callback(void* data, int argc, char** argv, char** /* azColName */) {
     }
 
     return 0;
-}
-
-// Function to execute a query using SQLite
-std::list<std::string> executeQuery(const std::string& query) {
-    std::list<std::string> resultList;
-    sqlite3* db;
-    char* errMsg = nullptr;
-
-    // Open the database connection
-    int rc = sqlite3_open(":memory:", &db);
-    if (rc != SQLITE_OK) {
-        std::cerr << "Error opening database: " << sqlite3_errmsg(db) << std::endl;
-        sqlite3_close(db);
-        return resultList;
-    }
-
-    // Execute the query and retrieve the results
-    rc = sqlite3_exec(db, query.c_str(), callback, &resultList, &errMsg);
-    if (rc != SQLITE_OK) {
-        std::cerr << "Error executing query: " << errMsg << std::endl;
-        sqlite3_free(errMsg);
-    }
-
-    // Close the database connection
-    sqlite3_close(db);
-
-    return resultList;
 }
 
 int print_em(void* data, int c_num, char** c_vals, char** c_names) {
@@ -147,6 +123,12 @@ nlohmann::json sampleSQLiteDistinct(sqlite3* DB, int N) {
         while (sqlite3_step(column_stmt) == SQLITE_ROW) {
             std::string column_name = reinterpret_cast<const char*>(sqlite3_column_text(column_stmt, 1));
 
+	    // Only sample from text types.
+	    auto column_type = sqlite3_column_type(column_stmt, 1);
+	    if (column_type != SQLITE_TEXT) {
+	      continue;
+	    }
+	    
             // Query for N random distinct values from current column
             std::string values_query = fmt::format("SELECT DISTINCT {} FROM {} ORDER BY RANDOM() LIMIT {};", column_name, table_name, N);
             sqlite3_stmt* values_stmt;
@@ -156,13 +138,29 @@ nlohmann::json sampleSQLiteDistinct(sqlite3* DB, int N) {
 	    while (sqlite3_step(values_stmt) == SQLITE_ROW) {
 	      const char* data = reinterpret_cast<const char*>(sqlite3_column_text(values_stmt, 0));
 	      if (data != nullptr) {
-		column_values.push_back(data);
-	      } else {
-		column_values.push_back("NULL");  // Or however you want to represent null values
+		// Only include non-null, non-numeric data.
+		// To decide if something is numeric, we try to convert it to an int or a float; if this succeeds, we skip it.
+		// We also limit the size of any text fields we include.
+		try {
+		  auto f = std::stof(data);
+		} catch (...) {
+		  try {
+		    auto i = std::stoi(data);
+		  } catch (...) {
+		    // Now, only include text fields below a certain length. This is a magic number.
+		    std::string truncated_data(data, std::min<size_t>(10, std::strlen(data)));
+		    if (DEBUG) {
+		      std::cerr << "NON NUMERIC: " << truncated_data << std::endl;
+		    }
+		    column_values.push_back(truncated_data.c_str());
+		  }
+		}
 	      }
 	    }
 
-            result[table_name][column_name] = column_values;
+	    if (column_values.size() > 1) {
+	      result[table_name][column_name] = column_values;
+	    }
             sqlite3_finalize(values_stmt);
         }
         sqlite3_finalize(column_stmt);
@@ -188,7 +186,7 @@ std::list<std::string> rephraseQuery(ai::aistream& ai, const std::string& query,
       {"role", "user" },
 	{"content", promptq.c_str() }
     });
-  ai << ai::ai_validator([](const json& j) {
+  ai << ai::validator([](const json& j) {
     // Enforce list output
     volatile auto list = j["Rewording"].get<std::list<std::string>>();
     return true;
@@ -219,16 +217,22 @@ static bool translateQuery(ai::aistream& ai,
 
   // auto nl_to_sql = fmt::format("Given a database with the following tables, schemas, and indexes, write a SQL query in SQLite's SQL dialect that answers this question or produces the desired report: '{}'. Produce a JSON object with the SQL query as a field \"SQL\". Offer a list of suggestions as SQL commands to create indexes that would improve query performance in a field \"Indexing\". Do so only if those indexes are not already given in 'Existing indexes'. Only produce output that can be parsed as JSON.\n\nSchemas:\n", query);
   
-  auto nl_to_sql = fmt::format("Given a database with the following tables, schemas, indexes, and samples for each column, write a SQL query in SQLite's SQL dialect that answers this question or produces the desired report: '{}'. Produce a JSON object with the SQL query as a field \"SQL\". Offer a list of suggestions as SQL commands to create indexes that would improve query performance in a field \"Indexing\". Do so only if those indexes are not already given in 'Existing indexes'. Only produce output that can be parsed as JSON.\n\nSchemas:\n", query);
+  auto nl_to_sql = fmt::format("Given a database with the following tables, schemas, indexes, and samples for each column, write a valid SQL query in SQLite's SQL dialect that answers this question or produces the desired report: '{}'. Produce a JSON object with the SQL query as a field \"SQL\". The produced query must only reference columns listed in the schemas. Offer a list of suggestions as SQL commands to create indexes that would improve query performance in a field \"Indexing\". Do so only if those indexes are not already given in 'Existing indexes'. Only produce output that can be parsed as JSON.\n", query);
   
   sqlite3_prepare_v2(db, "SELECT name, sql FROM sqlite_master WHERE type='table' OR type='view'", -1, &stmt, NULL);
 
   auto total_tables = 0;
-  
+
+  // Print the schema for each table.
   while (sqlite3_step(stmt) == SQLITE_ROW) {
     const char *name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
     const char *sql = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
-    nl_to_sql += fmt::format("Schema for {}: {}\n", name, sql);
+    // Strip any quote characters.
+    std::string sql_str(sql);
+    sql_str.erase(std::remove(sql_str.begin(), sql_str.end(), '\''), sql_str.end());
+    sql_str.erase(std::remove(sql_str.begin(), sql_str.end(), '\"'), sql_str.end());
+    sql_str.erase(std::remove(sql_str.begin(), sql_str.end(), '`'), sql_str.end());
+    nl_to_sql += fmt::format("Schema for {}: {}\n", name, sql_str.c_str());
     total_tables++;
   }
 
@@ -244,13 +248,13 @@ static bool translateQuery(ai::aistream& ai,
   auto printed_index_header = false;
   sqlite3_prepare_v2(db, "SELECT type, name, tbl_name, sql FROM sqlite_master WHERE type='index'", -1, &stmt, NULL);
   while (sqlite3_step(stmt) == SQLITE_ROW) {
-    if (!printed_index_header) {
-      nl_to_sql += "\n\nExisting indexes:\n";
-      printed_index_header = true;
-    }
     try {
       const char *tbl_name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
       const char *sql = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
+      if (!printed_index_header && tbl_name && sql) {
+	nl_to_sql += "\n\nExisting indexes:\n";
+	printed_index_header = true;
+      }
       nl_to_sql += fmt::format("Index for {}: {}\n", tbl_name, sql);
     } catch (fmt::v9::format_error& fe) {
       // Ignore indices where the query response is null, which could get us here.
@@ -259,7 +263,7 @@ static bool translateQuery(ai::aistream& ai,
 
   // Randomly sample values from the database.
   auto sample_value_json = sampleSQLiteDistinct(db, 5); // magic number FIXME
-  nl_to_sql += fmt::format("\nSample values for each column: {}\n", sample_value_json.dump());
+  nl_to_sql += fmt::format("\nSample values for columns: {}\n", sample_value_json.dump());
   
   /* ----  translate the natural language query to SQL and execute it (and request indexes) ---- */
   
@@ -273,7 +277,7 @@ static bool translateQuery(ai::aistream& ai,
 	{ "content", nl_to_sql.c_str() }
     });
   
-  ai << ai::ai_validator([&](const json& j) {
+  ai << ai::validator([&](const json& j) {
     try {
       // Ensure we got a SQL response.
       sql_translation = j["SQL"].get<std::string>();
@@ -291,14 +295,22 @@ static bool translateQuery(ai::aistream& ai,
     // Send the query to the database.
     auto rc = sqlite3_exec(db, sql_translation.c_str(), [](void*, int, char**, char**) {return 0;}, nullptr, nullptr);
     if (rc != SQLITE_OK) {
-      std::cerr << fmt::format("[SQLwrite] Error executing SQL statement \"{}\":\n           {}\n", sql_translation.c_str(), sqlite3_errmsg(db));
+      if (DEBUG) {
+	std::cerr << fmt::format("[SQLwrite] Error executing SQL statement \"{}\":\n           {}\n", sql_translation.c_str(), sqlite3_errmsg(db));
+      }
+      throw ai::exception(ai::exception_value::OTHER, fmt::format("The previous query (\"{}\") caused SQLite to fail with this error: {}.", std::string(sql_translation.c_str()), std::string(sqlite3_errmsg(db))));
       // sqlite3_finalize(stmt);
     }
     return rc == SQLITE_OK;
   });
 
   json json_result;
-  ai >> json_result;
+  try {
+    ai >> json_result;
+  } catch (...) {
+    json_result = json({ {"SQL", ""}, {"Indexing", {} } });
+    return false;
+  }
 
   return true;
 }
@@ -309,14 +321,14 @@ static void real_ask_command(sqlite3_context *ctx, int argc, const char * query)
   json json_result;
   std::string sql_translation;
   
-  // ai::aistream ai ({ .maxRetries = 3 , .debug = true });
-  ai::aistream ai ({ .maxRetries = 3 });
+  ai::aistream ai ({ .maxRetries = 3 , .debug = false });
+  // ai::aistream ai ({ .maxRetries = 3 });
 
   ai << ai::config::GPT_3_5;
   
   bool r = translateQuery(ai, ctx, argc, query, json_result, sql_translation);
   if (!r) {
-    std::cerr << "[SQLwrite] translation error." << std::endl;
+    std::cerr << "[SQLwrite] Unfortunately, we were not able to successfully translate that query." << std::endl;
     return;
   }
   
@@ -348,7 +360,7 @@ static void real_ask_command(sqlite3_context *ctx, int argc, const char * query)
       { "content", translate_to_natural_language_query.c_str() }
     });
   std::string translation;
-  ai << ai::ai_validator([&](const json& json_result){
+  ai << ai::validator([&](const json& json_result){
     try {
       translation = json_result["Translation"].get<std::string>();
       return true;
