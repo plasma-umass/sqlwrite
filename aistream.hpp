@@ -29,7 +29,7 @@
     ai >> stats;
     std::cout << "total tokens = " << stats.total_tokens << std::endl;
     
-  } catch (const ai_exception& e) {
+  } catch (const ai::exception& e) {
     std::cerr << e.what() << std::endl;
   }
   
@@ -43,7 +43,7 @@ using namespace openai;
 namespace ai {
   
   enum class config { GPT_3_5, GPT_4_0 };
-  enum class ai_exception_value { NO_KEY_DEFINED, INVALID_KEY, TOO_MANY_RETRIES };
+  enum class exception_value { NO_KEY_DEFINED, INVALID_KEY, TOO_MANY_RETRIES, OTHER };
 
   class stats {
   public:
@@ -52,19 +52,19 @@ namespace ai {
     unsigned int total_tokens = 0;
   };
 
-  class ai_validator {
+  class validator {
   public:
-    explicit ai_validator(std::function<bool(const json&)> validator)
-      : validator (validator)
+    explicit validator(std::function<bool(const json&)> v)
+      : function (v)
     {
     }
-    std::function<bool(const json&)> validator = [](const json&){ return true; };
+    std::function<bool(const json&)> function = [](const json&){ return true; };
   };
   
   
-  class ai_exception {
+  class exception {
   public:
-    explicit ai_exception(ai_exception_value e, const std::string& msg) {
+    explicit exception(exception_value e, const std::string& msg) {
       _exception = e;
       _msg = msg;
     }
@@ -72,7 +72,7 @@ namespace ai {
       return _msg;
     }
   private:
-    ai_exception_value _exception;
+    exception_value _exception;
     std::string _msg;
   };
 
@@ -103,7 +103,7 @@ namespace ai {
       // Check environment.
       // Throw exception if no key found or provided.
       if (_key == "") {
-	throw ai_exception(ai_exception_value::NO_KEY_DEFINED,
+	throw ai::exception(ai::exception_value::NO_KEY_DEFINED,
 			   fmt::format("There was no key defined in the constructor or in the environment variable {}.", _keyName.c_str()));
       }
     }
@@ -124,8 +124,8 @@ namespace ai {
     }
   
     // Overload << operator for validation
-    aistream& operator<<(const ai_validator& v) {
-      _validator = v.validator;
+    aistream& operator<<(const validator& v) {
+      _validator = v.function;
       return *this;
     }
   
@@ -145,15 +145,15 @@ namespace ai {
     aistream& operator>>(json& response_json) {
       response_json = {{}};
       auto retries = _maxRetries;
+      json j;
+      j["model"] = _model;
+      j["messages"] = _messages;
       while (true) {
 	if (retries == 0) {
-	  throw ai_exception(ai_exception_value::TOO_MANY_RETRIES,
+	  throw ai::exception(ai::exception_value::TOO_MANY_RETRIES,
 			     fmt::format("Maximum number of retries exceeded ({}).", _maxRetries));
 	}
 	try {
-	  json j;
-	  j["model"] = _model;
-	  j["messages"] = _messages;
 	  if (_debug) {
 	    std::cerr << "Sending: " << j.dump() << std::endl;
 	  }
@@ -166,8 +166,23 @@ namespace ai {
 	  _stats.prompt_tokens += chat["usage"]["prompt_tokens"].get<unsigned int>();
 	  _stats.total_tokens += chat["usage"]["total_tokens"].get<unsigned int>();
 	  response_json = json::parse(_result);
-	  if (_validator(response_json)) {
-	    break;
+	  try {
+	    bool valid = _validator(response_json);
+	    if (valid) {
+	      break;
+	    }
+	  } catch (ai::exception& e) {
+	    if (_debug) {
+	      std::cerr << fmt::format("Validator caught exception {}\n", e.what()) << std::endl;
+	    }
+#if 0
+	    // Feedback loop.
+	    _messages.push_back(json({
+		  {"role", "user"},
+		  {"content", e.what() }
+		}));
+	    j["messages"] = _messages;
+#endif
 	  }
 	}
 	catch (nlohmann::json_abi_v3_11_2::detail::parse_error& pe) {
@@ -186,7 +201,8 @@ namespace ai {
 	  std::string msg(e.what());
 	  // If we find "API key" in the message, we assume we had an invalid key.
 	  if (msg.find("API key") != std::string::npos) {
-	    throw ai_exception(ai_exception_value::INVALID_KEY,
+	    std::cerr << "Missing API key?" << std::endl;
+	    throw ai::exception(ai::exception_value::INVALID_KEY,
 			       fmt::format("The API key ({}) was invalid.", _key.c_str()));
 	  } else {
 	    // Otherwise, pass up the exception.
@@ -195,7 +211,7 @@ namespace ai {
 	}
 	retries -= 1;
 	if (_debug) {
-	  std::cerr << "Retry." << std::endl;
+	  std::cerr << "Retrying. Retries remaining: " << retries << std::endl;
 	}
       }
       return *this;
