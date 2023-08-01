@@ -12,8 +12,8 @@
   std::string assistant_msg("You are a programming assistant who ONLY responds with JSON objects.");
   std::string query("Your query goes here");
   try {
-    ai_stream ai({.maxRetries = 3 });
-    ai << ai_config::GPT_3_5
+    aistream ai({.maxRetries = 3 });
+    ai << config::GPT_3_5
        << json({
 	   {"role", "assistant"},
 	   {"content", assistant_msg.c_str()}
@@ -25,7 +25,7 @@
     json j;
     ai >> j; // performs query
     std::cout << "j = " << j.dump() << std::endl;
-    ai_stats stats;
+    stats stats;
     ai >> stats;
     std::cout << "total tokens = " << stats.total_tokens << std::endl;
     
@@ -42,10 +42,10 @@ using namespace openai;
 
 namespace ai {
   
-  enum class ai_config { GPT_3_5, GPT_4_0 };
+  enum class config { GPT_3_5, GPT_4_0 };
   enum class ai_exception_value { NO_KEY_DEFINED, INVALID_KEY, TOO_MANY_RETRIES };
 
-  class ai_stats {
+  class stats {
   public:
     unsigned int completion_tokens = 0;
     unsigned int prompt_tokens = 0;
@@ -76,7 +76,7 @@ namespace ai {
     std::string _msg;
   };
 
-  class ai_stream {
+  class aistream {
   public:
     struct params {
       const std::string& apiKey = "";
@@ -84,7 +84,7 @@ namespace ai {
       const unsigned int maxRetries = 3;
       const bool debug = false;
     };
-    explicit ai_stream(params p)
+    explicit aistream(params p)
       : _maxRetries (p.maxRetries),
 	_apiKey (p.apiKey),
 	_keyName (p.keyName),
@@ -109,13 +109,13 @@ namespace ai {
     }
 
     // Overload << operator for configuration
-    ai_stream& operator<<(const ai_config& config) {
+    aistream& operator<<(const ai::config& config) {
       switch (config) {
-      case ai_config::GPT_3_5:
+      case ai::config::GPT_3_5:
 	_model = "gpt-3.5-turbo";
 	// std::cout << "GPT 3.5" << std::endl;
 	break;
-      case ai_config::GPT_4_0:
+      case ai::config::GPT_4_0:
 	_model = "gpt-4.0";
 	// std::cout << "GPT 4" << std::endl;
 	break;
@@ -124,25 +124,25 @@ namespace ai {
     }
   
     // Overload << operator for validation
-    ai_stream& operator<<(const ai_validator& v) {
+    aistream& operator<<(const ai_validator& v) {
       _validator = v.validator;
       return *this;
     }
   
     // Overload << operator to send queries
-    ai_stream& operator<<(const json& js) {
+    aistream& operator<<(const json& js) {
       _messages.push_back(js);
       return *this;
     }
 
     // Overload >> operator to save stats
-    ai_stream& operator>>(ai_stats& stats) {
+    aistream& operator>>(stats& stats) {
       stats = _stats;
       return *this;
     }
       
     // Overload >> operator to read responses
-    ai_stream& operator>>(json& response_json) {
+    aistream& operator>>(json& response_json) {
       response_json = {{}};
       auto retries = _maxRetries;
       while (true) {
@@ -218,7 +218,7 @@ namespace ai {
     const std::string _apiKey;
     const std::string _keyName;
     const bool _debug;
-    ai_stats _stats;
+    stats _stats;
     std::function<bool(const json&)> _validator = [](const json&){ return true; };
   };
 

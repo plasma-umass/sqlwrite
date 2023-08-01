@@ -174,7 +174,7 @@ nlohmann::json sampleSQLiteDistinct(sqlite3* DB, int N) {
 
 
 // Function to rephrase a query using ChatGPT
-std::list<std::string> rephraseQuery(ai::ai_stream& ai, const std::string& query, int n = 10)
+std::list<std::string> rephraseQuery(ai::aistream& ai, const std::string& query, int n = 10)
 {
   // Query the ChatGPT model for rephrasing
   auto promptq = fmt::format("Rephrase the following query {} times, all using different wording. Produce a JSON object with the result as a list with the field \"Rewording\". Do not include any SQL in any rewording. Query to rephrase: '{}'", n, query);
@@ -202,7 +202,7 @@ std::list<std::string> rephraseQuery(ai::ai_stream& ai, const std::string& query
   return rephrasedQueries;
 }
 
-static bool translateQuery(ai::ai_stream& ai,
+static bool translateQuery(ai::aistream& ai,
 			   sqlite3_context *ctx,
 			   int argc,
 			   const char * query,
@@ -309,10 +309,10 @@ static void real_ask_command(sqlite3_context *ctx, int argc, const char * query)
   json json_result;
   std::string sql_translation;
   
-  // ai::ai_stream ai ({ .maxRetries = 3 , .debug = true });
-  ai::ai_stream ai ({ .maxRetries = 3 });
+  // ai::aistream ai ({ .maxRetries = 3 , .debug = true });
+  ai::aistream ai ({ .maxRetries = 3 });
 
-  ai << ai::ai_config::GPT_3_5;
+  ai << ai::config::GPT_3_5;
   
   bool r = translateQuery(ai, ctx, argc, query, json_result, sql_translation);
   if (!r) {
