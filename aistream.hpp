@@ -185,13 +185,13 @@ namespace ai {
 #endif
 	  }
 	}
-	catch (nlohmann::json_abi_v3_11_2::detail::parse_error& pe) {
+	catch (json::parse_error& pe) {
 	  // Retry if there were JSON parse errors.
 	  if (_debug) {
 	    std::cerr << "JSON parse error." << std::endl;
 	  }
 	}
-	catch (nlohmann::json_abi_v3_11_2::detail::type_error& te) {
+	catch (json::type_error& te) {
 	  // Retry if there were JSON parse errors.
 	  if (_debug) {
 	    std::cerr << "JSON parse error." << std::endl;
