@@ -29,7 +29,33 @@
 
 SQLITE_EXTENSION_INIT1;
 
+std::string prompt("[SQLwrite] ");
+
 const bool DEBUG = false;
+
+#include <iostream>
+#include <sstream>
+
+std::string prefaceWithPrompt(const std::string& inputString, const std::string& prompt) {
+    std::stringstream input(inputString);
+    std::stringstream output;
+    std::string line;
+
+    while (std::getline(input, line)) {
+        output << prompt << line << '\n';
+    }
+
+    return output.str();
+}
+
+/* 
+    std::string originalString = "Hello\nWorld\nThis is a test";
+    std::string prompt = "> ";
+
+    std::string newString = prefaceWithPrompt(originalString, prompt);
+
+    std::cout << newString;
+*/
 
 
 // Function to calculate SHA256 hash of a string
@@ -238,7 +264,7 @@ static bool translateQuery(ai::aistream& ai,
 
   // Fail gracefully if no databases are present.
   if (total_tables == 0) {
-    std::cout << "SQLwrite: you need to load a table first." << std::endl;
+    std::cout << prompt.c_str() << "you need to load a table first." << std::endl;
     sqlite3_finalize(stmt);
     return false;
   }
@@ -296,7 +322,7 @@ static bool translateQuery(ai::aistream& ai,
     auto rc = sqlite3_exec(db, sql_translation.c_str(), [](void*, int, char**, char**) {return 0;}, nullptr, nullptr);
     if (rc != SQLITE_OK) {
       if (DEBUG) {
-	std::cerr << fmt::format("[SQLwrite] Error executing SQL statement \"{}\":\n           {}\n", sql_translation.c_str(), sqlite3_errmsg(db));
+	std::cerr << fmt::format("{}Error executing SQL statement \"{}\":\n           {}\n", prompt.c_str(), sql_translation.c_str(), sqlite3_errmsg(db));
       }
       throw ai::exception(ai::exception_value::OTHER, fmt::format("The previous query (\"{}\") caused SQLite to fail with this error: {}.", std::string(sql_translation.c_str()), std::string(sqlite3_errmsg(db))));
       // sqlite3_finalize(stmt);
@@ -328,17 +354,18 @@ static void real_ask_command(sqlite3_context *ctx, int argc, const char * query)
   
   bool r = translateQuery(ai, ctx, argc, query, json_result, sql_translation);
   if (!r) {
-    std::cerr << "[SQLwrite] Unfortunately, we were not able to successfully translate that query." << std::endl;
+    std::cerr << prompt.c_str() << "Unfortunately, we were not able to successfully translate that query." << std::endl;
     return;
   }
   
   // Send the query to the database, printing it this time.
   auto rc = sqlite3_exec(db, sql_translation.c_str(), print_em, nullptr, nullptr);
+
   
-  std::cout << fmt::format("[SQLwrite] translation to SQL: {}\n", sql_translation.c_str());
+  std::cout << fmt::format("{}translation to SQL:\n{}", prompt.c_str(), prefaceWithPrompt(sql_translation, prompt).c_str());
   
   if (json_result["Indexing"].size() > 0) {
-    std::cout << "[SQLwrite] indexing suggestions to improve the performance for this query:" << std::endl;
+    std::cout << prompt.c_str() << "indexing suggestions to improve the performance for this query:" << std::endl;
     int i = 0;
     for (auto& item : json_result["Indexing"]) {
       i++;
@@ -370,7 +397,7 @@ static void real_ask_command(sqlite3_context *ctx, int argc, const char * query)
   });
   ai >> json_result;
   //  auto translation = json_result["Translation"].get<std::string>();
-  std::cout << fmt::format("[SQLwrite] translation back to natural language: {}\n", translation.c_str());
+  std::cout << fmt::format("{}translation back to natural language:\n{}", prompt.c_str(), prefaceWithPrompt(translation, prompt).c_str());
 
 #if 0 // disable temporarily
   /* ---- get N translations from natural language to compare results ---- */
