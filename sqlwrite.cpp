@@ -66,7 +66,7 @@ int callback(void* data, int argc, char** argv, char** /* azColName */) {
 
 int print_em(void* data, int c_num, char** c_vals, char** c_names) {
     for (int i = 0; i < c_num; i++) {
-      std::cout << (c_vals[i] ? c_vals[i] : "NULL");
+      std::cout << (c_vals[i] ? c_vals[i] : "");
       if ((i < c_num-1) && (c_num > 1)) {
 	std::cout << "|";
       }
