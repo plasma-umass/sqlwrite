@@ -263,7 +263,7 @@ static bool translateQuery(ai::aistream& ai,
 
   // Randomly sample values from the database.
   auto sample_value_json = sampleSQLiteDistinct(db, 5); // magic number FIXME
-  nl_to_sql += fmt::format("\nSample values for columns: {}\n", sample_value_json.dump());
+  nl_to_sql += fmt::format("\nSample values for columns: {}\n", sample_value_json.dump(-1, ' ', false, json::error_handler_t::replace));
   
   /* ----  translate the natural language query to SQL and execute it (and request indexes) ---- */
   
