@@ -116,7 +116,7 @@ namespace ai {
 	// std::cout << "GPT 3.5" << std::endl;
 	break;
       case ai::config::GPT_4_0:
-	_model = "gpt-4.0";
+	_model = "gpt-4";
 	// std::cout << "GPT 4" << std::endl;
 	break;
       };
