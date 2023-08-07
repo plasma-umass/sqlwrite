@@ -25,6 +25,7 @@
 
 #include "openai.hpp"
 #include "sqlite3ext.h"
+
 #include "aistream.hpp"
 
 SQLITE_EXTENSION_INIT1;
@@ -42,7 +43,7 @@ std::string prefaceWithPrompt(const std::string& inputString, const std::string&
     std::string line;
 
     while (std::getline(input, line)) {
-        output << prompt << line << '\n';
+      output << prompt << line << '\n';
     }
 
     return output.str();
@@ -90,6 +91,8 @@ int callback(void* data, int argc, char** argv, char** /* azColName */) {
     return 0;
 }
 
+int lines_printed = 0;
+
 int print_em(void* data, int c_num, char** c_vals, char** c_names) {
     for (int i = 0; i < c_num; i++) {
       std::cout << (c_vals[i] ? c_vals[i] : "");
@@ -98,6 +101,7 @@ int print_em(void* data, int c_num, char** c_vals, char** c_names) {
       }
     }
     std::cout << std::endl;
+    lines_printed++;
     return 0;
 }
 
@@ -345,23 +349,43 @@ static void real_ask_command(sqlite3_context *ctx, int argc, const char * query)
 
   sqlite3 *db = sqlite3_context_db_handle(ctx);
   json json_result;
+  std::string query_str (query);
   std::string sql_translation;
   
-  ai::aistream ai ({ .maxRetries = 3 , .debug = false });
+  ai::aistream ai ({ .maxRetries = 3 , .debug = DEBUG });
   // ai::aistream ai ({ .maxRetries = 3 });
 
   ai << ai::config::GPT_3_5;
-  
-  bool r = translateQuery(ai, ctx, argc, query, json_result, sql_translation);
-  if (!r) {
-    std::cerr << prompt.c_str() << "Unfortunately, we were not able to successfully translate that query." << std::endl;
-    return;
-  }
-  
-  // Send the query to the database, printing it this time.
-  auto rc = sqlite3_exec(db, sql_translation.c_str(), print_em, nullptr, nullptr);
 
+  int retriesRemaining = 3;
+  bool updatedQuery = false;
   
+  while (retriesRemaining) {
+    bool r = translateQuery(ai, ctx, argc, query_str.c_str(), json_result, sql_translation);
+    if (!r) {
+      std::cerr << prompt.c_str() << "Unfortunately, we were not able to successfully translate that query." << std::endl;
+      return;
+    }
+  
+    // Send the query to the database, printing it this time.
+    lines_printed = 0;
+    auto rc = sqlite3_exec(db, sql_translation.c_str(), print_em, nullptr, nullptr);
+    
+    if (lines_printed > 0) {
+      // We got at least one result - exit the retry loop.
+      break;
+    }
+    // Retry if we got an empty set of results.
+    retriesRemaining--;
+
+    if (!updatedQuery) {
+      query_str += " The resulting SQL query should allow for fuzzy matches, including relaxing inequalities, in order to get the query to produce at least one result.";
+      updatedQuery = true;
+    }
+    // Switch to GPT 4
+    // ai << ai::config::GPT_4_0;
+
+  }
   std::cout << fmt::format("{}translation to SQL:\n{}", prompt.c_str(), prefaceWithPrompt(sql_translation, prompt).c_str());
   
   if (json_result["Indexing"].size() > 0) {
@@ -374,6 +398,7 @@ static void real_ask_command(sqlite3_context *ctx, int argc, const char * query)
   }
 
   /* ----  translate the SQL query back to natural language ---- */
+#if 0 // FOR EXPERIMENTS ONLY
   
   ai.reset();
   ai << json({
@@ -398,7 +423,10 @@ static void real_ask_command(sqlite3_context *ctx, int argc, const char * query)
   ai >> json_result;
   //  auto translation = json_result["Translation"].get<std::string>();
   std::cout << fmt::format("{}translation back to natural language:\n{}", prompt.c_str(), prefaceWithPrompt(translation, prompt).c_str());
+#endif
 
+
+  
 #if 0 // disable temporarily
   /* ---- get N translations from natural language to compare results ---- */
   const auto N = 10;
