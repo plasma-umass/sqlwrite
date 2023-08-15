@@ -8,6 +8,31 @@
   
 */
 
+#if !defined(INCLUDE_RANDOM_SAMPLES)
+#define INCLUDE_RANDOM_SAMPLES 1
+#endif
+#if !defined(INCLUDE_INDEXES)
+#define INCLUDE_INDEXES 1
+#endif
+#if !defined(TRANSLATE_QUERY_BACK_TO_NL)
+//#define TRANSLATE_QUERY_BACK_TO_NL 0 // for experiments only
+#define TRANSLATE_QUERY_BACK_TO_NL 1
+#endif
+#if !defined(RETRY_ON_EMPTY_RESULTS)
+#define RETRY_ON_EMPTY_RESULTS 1
+#endif
+#if !defined(RETRY_ON_TOO_MANY_RESULTS)
+#define RETRY_ON_TOO_MANY_RESULTS 1
+#endif
+#if !defined(MAX_RETRIES_ON_RESULTS)
+#define MAX_RETRIES_ON_RESULTS 5
+#endif
+#if !defined(MAX_RETRIES_VALIDITY)
+#define MAX_RETRIES_VALIDITY 5
+#endif
+
+#define LARGE_QUERY_THRESHOLD 10
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -101,6 +126,11 @@ int print_em(void* data, int c_num, char** c_vals, char** c_names) {
       }
     }
     std::cout << std::endl;
+    return 0;
+}
+
+
+int count_em(void* data, int c_num, char** c_vals, char** c_names) {
     lines_printed++;
     return 0;
 }
@@ -274,7 +304,7 @@ static bool translateQuery(ai::aistream& ai,
   }
 
   // Add indexes, if any.
-
+#if INCLUDE_INDEXES
   auto printed_index_header = false;
   sqlite3_prepare_v2(db, "SELECT type, name, tbl_name, sql FROM sqlite_master WHERE type='index'", -1, &stmt, NULL);
   while (sqlite3_step(stmt) == SQLITE_ROW) {
@@ -290,10 +320,13 @@ static bool translateQuery(ai::aistream& ai,
       // Ignore indices where the query response is null, which could get us here.
     }
   }
-
+#endif
+  
   // Randomly sample values from the database.
+#if INCLUDE_RANDOM_SAMPLES
   auto sample_value_json = sampleSQLiteDistinct(db, 5); // magic number FIXME
   nl_to_sql += fmt::format("\nSample values for columns: {}\n", sample_value_json.dump(-1, ' ', false, json::error_handler_t::replace));
+#endif
   
   /* ----  translate the natural language query to SQL and execute it (and request indexes) ---- */
   
@@ -352,12 +385,19 @@ static void real_ask_command(sqlite3_context *ctx, int argc, const char * query)
   std::string query_str (query);
   std::string sql_translation;
   
-  ai::aistream ai ({ .maxRetries = 3 , .debug = DEBUG });
+  ai::aistream ai ({ .maxRetries = MAX_RETRIES_VALIDITY , .debug = DEBUG });
   // ai::aistream ai ({ .maxRetries = 3 });
 
-  ai << ai::config::GPT_3_5;
+  // ai << ai::config::GPT_3_5;
+  // Switch to GPT 4
+  ai << ai::config::GPT_4_0;
 
-  int retriesRemaining = 3;
+#if RETRY_ON_EMPTY_RESULTS
+  int retriesRemaining = MAX_RETRIES_ON_RESULTS;
+#else
+  int retriesRemaining = 1;
+#endif
+  
   bool updatedQuery = false;
   
   while (retriesRemaining) {
@@ -367,26 +407,41 @@ static void real_ask_command(sqlite3_context *ctx, int argc, const char * query)
       return;
     }
   
-    // Send the query to the database, printing it this time.
+    // Send the query to the database to count the number of lines.
     lines_printed = 0;
-    auto rc = sqlite3_exec(db, sql_translation.c_str(), print_em, nullptr, nullptr);
-    
+    auto rc = sqlite3_exec(db, sql_translation.c_str(), count_em, nullptr, nullptr);
+
     if (lines_printed > 0) {
-      // We got at least one result - exit the retry loop.
+#if RETRY_ON_TOO_MANY_RESULTS
+      if (lines_printed < LARGE_QUERY_THRESHOLD) {
+	// We got at least one result and not more than N - exit the retry loop.
+	break;
+      }
+#else
       break;
+#endif
     }
     // Retry if we got an empty set of results.
     retriesRemaining--;
 
     if (!updatedQuery) {
-      query_str += " The resulting SQL query should allow for fuzzy matches, including relaxing inequalities, in order to get the query to produce at least one result.";
-      updatedQuery = true;
+      if (lines_printed == 0) {
+	query_str += " The resulting SQL query should allow for fuzzy matches, including relaxing inequalities, in order to get the query to produce at least one result.";
+	updatedQuery = true;
+      }
+#if RETRY_ON_TOO_MANY_RESULTS
+      else if (lines_printed > LARGE_QUERY_THRESHOLD) {
+	query_str += fmt::format(" The resulting SQL query should probably be constrained, including sharpening inequalities, or using INTERSECT, to reduce the number of results.");
+	updatedQuery = true;
+      }
+#endif
     }
-    // Switch to GPT 4
-    // ai << ai::config::GPT_4_0;
-
   }
-  std::cout << fmt::format("{}translation to SQL:\n{}", prompt.c_str(), prefaceWithPrompt(sql_translation, prompt).c_str());
+  // Actually print the results of the final query.
+  auto rc = sqlite3_exec(db, sql_translation.c_str(), print_em, nullptr, nullptr);
+  
+  // should be cout FIXME
+  std::cerr << fmt::format("{}translation to SQL:\n{}", prompt.c_str(), prefaceWithPrompt(sql_translation, prompt).c_str());
   
   if (json_result["Indexing"].size() > 0) {
     std::cout << prompt.c_str() << "indexing suggestions to improve the performance for this query:" << std::endl;
@@ -398,8 +453,7 @@ static void real_ask_command(sqlite3_context *ctx, int argc, const char * query)
   }
 
   /* ----  translate the SQL query back to natural language ---- */
-#if 0 // FOR EXPERIMENTS ONLY
-  
+#if TRANSLATE_QUERY_BACK_TO_NL
   ai.reset();
   ai << json({
       { "role", "assistant" },
@@ -425,8 +479,7 @@ static void real_ask_command(sqlite3_context *ctx, int argc, const char * query)
   std::cout << fmt::format("{}translation back to natural language:\n{}", prompt.c_str(), prefaceWithPrompt(translation, prompt).c_str());
 #endif
 
-
-  
+ 
 #if 0 // disable temporarily
   /* ---- get N translations from natural language to compare results ---- */
   const auto N = 10;
