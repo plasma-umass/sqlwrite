@@ -129,10 +129,18 @@ int print_em(void* data, int c_num, char** c_vals, char** c_names) {
     return 0;
 }
 
+std::string query_result;
 
 int count_em(void* data, int c_num, char** c_vals, char** c_names) {
-    lines_printed++;
-    return 0;
+  for (int i = 0; i < c_num; i++) {
+    query_result += (c_vals[i] ? c_vals[i] : "");
+    if ((i < c_num - 1) && (c_num > 1)) {
+      query_result += "|";
+    }
+  }
+  query_result += "\n";
+  lines_printed++;
+  return 0;
 }
 
 #include <iostream>
@@ -277,7 +285,7 @@ static bool translateQuery(ai::aistream& ai,
 
   // auto nl_to_sql = fmt::format("Given a database with the following tables, schemas, and indexes, write a SQL query in SQLite's SQL dialect that answers this question or produces the desired report: '{}'. Produce a JSON object with the SQL query as a field \"SQL\". Offer a list of suggestions as SQL commands to create indexes that would improve query performance in a field \"Indexing\". Do so only if those indexes are not already given in 'Existing indexes'. Only produce output that can be parsed as JSON.\n\nSchemas:\n", query);
   
-  auto nl_to_sql = fmt::format("Given a database with the following tables, schemas, indexes, and samples for each column, write a valid SQL query in SQLite's SQL dialect that answers this question or produces the desired report: '{}'. Produce a JSON object with the SQL query as a field \"SQL\". The produced query must only reference columns listed in the schemas. Offer a list of suggestions as SQL commands to create indexes that would improve query performance in a field \"Indexing\". Do so only if those indexes are not already given in 'Existing indexes'. Only produce output that can be parsed as JSON.\n", query);
+  auto nl_to_sql = fmt::format("Given a database with the following tables, schemas, indexes, and samples for each column, write a valid SQL query in SQLite's SQL dialect that answers this question or produces the desired report: '{}'. Produce a JSON object with the SQL query as a field \"SQL\". The produced query must only reference columns listed in the schemas. Offer a list of suggestions as SQL commands to create indexes that would improve query performance in a field \"Indexing\". Do so only if those indexes are not already given in 'Existing indexes'. Refer to the samples to form the query, taking into account format and capitalization. Only produce output that can be parsed as JSON.\n", query);
   
   sqlite3_prepare_v2(db, "SELECT name, sql FROM sqlite_master WHERE type='table' OR type='view'", -1, &stmt, NULL);
 
@@ -409,9 +417,13 @@ static void real_ask_command(sqlite3_context *ctx, int argc, const char * query)
   
     // Send the query to the database to count the number of lines.
     lines_printed = 0;
+    query_result = "";
     auto rc = sqlite3_exec(db, sql_translation.c_str(), count_em, nullptr, nullptr);
 
-    if (lines_printed > 0) {
+    //std::cout << "Translated query: " << sql_translation << std::endl;
+    //std::cout << "Query result: " << query_result << std::endl;
+    
+    if ((lines_printed > 0) && (query_result != "0\n")) {
 #if RETRY_ON_TOO_MANY_RESULTS
       if (lines_printed < LARGE_QUERY_THRESHOLD) {
 	// We got at least one result and not more than N - exit the retry loop.
