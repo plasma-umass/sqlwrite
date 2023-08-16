@@ -15,7 +15,7 @@
 #define INCLUDE_INDEXES 1
 #endif
 #if !defined(TRANSLATE_QUERY_BACK_TO_NL)
-//#define TRANSLATE_QUERY_BACK_TO_NL 0 // for experiments only
+// #define TRANSLATE_QUERY_BACK_TO_NL 0 // for experiments only
 #define TRANSLATE_QUERY_BACK_TO_NL 1
 #endif
 #if !defined(RETRY_ON_EMPTY_RESULTS)
@@ -426,12 +426,12 @@ static void real_ask_command(sqlite3_context *ctx, int argc, const char * query)
 
     if (!updatedQuery) {
       if (lines_printed == 0) {
-	query_str += " The resulting SQL query should allow for fuzzy matches, including relaxing inequalities, in order to get the query to produce at least one result.";
+	query_str += " The resulting SQL query should allow for fuzzy matches, including relaxing inequalities or making queries case-insensitive, in order to get the query to produce at least one result.";
 	updatedQuery = true;
       }
 #if RETRY_ON_TOO_MANY_RESULTS
       else if (lines_printed > LARGE_QUERY_THRESHOLD) {
-	query_str += fmt::format(" The resulting SQL query should probably be constrained, including sharpening inequalities, or using INTERSECT, to reduce the number of results.");
+	query_str += fmt::format(" The resulting SQL query should probably be constrained, including sharpening inequalities, using INTERSECT or DISTINCT, to reduce the number of results.");
 	updatedQuery = true;
       }
 #endif
