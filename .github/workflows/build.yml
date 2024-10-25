@@ -67,7 +67,7 @@ jobs:
           upload_url: ${{ github.event.release.upload_url }}
           asset_path: ./sqlwrite-linux
           asset_name: sqlwrite-linux
-          label: "Linux binary"
+          asset_content_type: application/octet-stream
 
       - name: Upload macOS binary
         uses: actions/upload-release-asset@v1
@@ -77,4 +77,4 @@ jobs:
           upload_url: ${{ github.event.release.upload_url }}
           asset_path: ./sqlwrite-mac
           asset_name: sqlwrite-mac
-          label: "macOS binary"
+          asset_content_type: application/octet-stream
