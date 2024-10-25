@@ -1,0 +1,80 @@
+name: Build Binaries
+
+on:
+  push:
+    tags:
+      - '*'  # Only build on tag pushes for releases
+  workflow_dispatch:  # Allow manual triggering of the build
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            binary_name: sqlwrite-linux
+          - os: macos-latest
+            binary_name: sqlwrite-mac
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            sudo apt-get update
+            sudo apt-get install -y make
+          fi
+
+      - name: Build with Make
+        run: make
+
+      - name: Rename binary
+        run: |
+          mv sqlwrite ${{ matrix.binary_name }}
+
+      - name: Upload binary as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.binary_name }}
+          path: ${{ matrix.binary_name }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: sqlwrite-linux
+          path: .
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: sqlwrite-mac
+          path: .
+
+      - name: Upload release binaries
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./sqlwrite-linux
+          asset_name: sqlwrite-linux
+          label: "Linux binary"
+
+      - name: Upload macOS binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./sqlwrite-mac
+          asset_name: sqlwrite-mac
+          label: "macOS binary"
