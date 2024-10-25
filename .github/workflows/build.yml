@@ -26,7 +26,7 @@ jobs:
         run: |
           if [[ "$RUNNER_OS" == "Linux" ]]; then
             sudo apt-get update
-            sudo apt-get install -y make curl
+            sudo apt-get install -y make curl libcurl4-openssl-dev
           fi
 
       - name: Build with Make
