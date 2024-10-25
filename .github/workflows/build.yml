@@ -47,7 +47,10 @@ jobs:
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     steps:
-      - name: Download artifacts
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Download Linux artifact
         uses: actions/download-artifact@v3
         with:
           name: sqlwrite-linux
@@ -59,22 +62,33 @@ jobs:
           name: sqlwrite-mac
           path: .
 
-      - name: Upload release binaries
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+
+      - name: Upload Linux binary to release
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ github.event.release.upload_url }}
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./sqlwrite-linux
           asset_name: sqlwrite-linux
           asset_content_type: application/octet-stream
 
-      - name: Upload macOS binary
+      - name: Upload macOS binary to release
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ github.event.release.upload_url }}
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./sqlwrite-mac
           asset_name: sqlwrite-mac
           asset_content_type: application/octet-stream
