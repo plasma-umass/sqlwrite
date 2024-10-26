@@ -14,9 +14,9 @@ jobs:
         os: [ubuntu-latest, macos-latest]
         include:
           - os: ubuntu-latest
-            binary_name: sqlwrite-linux
+            binary_name: sqlwrite
           - os: macos-latest
-            binary_name: sqlwrite-mac
+            binary_name: sqlwrite-mac.pkg
 
     steps:
       - name: Checkout repository
@@ -32,15 +32,23 @@ jobs:
       - name: Build with Make
         run: make
 
-      - name: Rename binary
-        run: |
-          mv sqlwrite ${{ matrix.binary_name }}
+      - name: Package as .pkg on macOS
+        if: matrix.os == 'macos-latest'
+        run: make pkg
 
-      - name: Upload binary as artifact
+      - name: Upload Linux binary as artifact
+        if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v3
         with:
-          name: ${{ matrix.binary_name }}
-          path: ${{ matrix.binary_name }}
+          name: sqlwrite
+          path: sqlwrite
+
+      - name: Upload macOS pkg as artifact
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-artifact@v3
+        with:
+          name: sqlwrite-mac.pkg
+          path: sqlwrite-mac.pkg
 
   release:
     needs: build
@@ -53,13 +61,13 @@ jobs:
       - name: Download Linux artifact
         uses: actions/download-artifact@v3
         with:
-          name: sqlwrite-linux
+          name: sqlwrite
           path: .
 
-      - name: Download macOS artifact
+      - name: Download macOS pkg artifact
         uses: actions/download-artifact@v3
         with:
-          name: sqlwrite-mac
+          name: sqlwrite-mac.pkg
           path: .
 
       - name: Delete existing release (if any)
@@ -85,16 +93,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./sqlwrite-linux
-          asset_name: sqlwrite-linux
+          asset_path: ./sqlwrite
+          asset_name: sqlwrite
           asset_content_type: application/octet-stream
 
-      - name: Upload macOS binary to release
+      - name: Upload macOS pkg to release
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./sqlwrite-mac
-          asset_name: sqlwrite-mac
+          asset_path: ./sqlwrite-mac.pkg
+          asset_name: sqlwrite-mac.pkg
           asset_content_type: application/octet-stream
