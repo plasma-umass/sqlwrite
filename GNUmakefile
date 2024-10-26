@@ -1,27 +1,29 @@
 LIBNAME := sqlwrite
 OPTIMIZATION := # -O3
 CXXFLAGS := -std=c++17 -g $(OPTIMIZATION) -DNDEBUG -I. -Ifmt/include
-CFLAGS := $(OPTIMIZATION) -g -DNDEBUG
+CFLAGS := $(OPTIMIZATION) -g -DNDEBUG -fPIC -shared
 
+
+# Check for macOS and set variables accordingly
 ifeq ($(shell uname -s),Darwin)
-LIBFILE := $(LIBNAME).dylib
+DYLIB_EXT = dylib
+LDFLAGS = -dynamiclib
 DYNAMIC_LIB := -dynamiclib
-SQLITE_LIB = libsqlite3.dylib
 CXXFLAGS := $(CXXFLAGS) -arch arm64 $(shell pkg-config --cflags --libs libcurl openssl)
+PACKAGE := pkg
 else
-LIBFILE := $(LIBNAME).so
+DYLIB_EXT = so
+LDFLAGS = -shared
 DYNAMIC_LIB := -shared -fPIC
-SQLITE_LIB = libsqlite3.so
 CXXFLAGS := $(CXXFLAGS) -lcurl -lssl -lcrypto
+PACKAGE := 
 endif
 
+LIBFILE := $(LIBNAME).$(DYLIB_EXT)
+SQLITE_LIB = libsqlite3.$(DYLIB_EXT)
 DOMAIN = org.plasma-umass.sqlwrite
 
-ifeq ($(shell uname -s),Darwin)
-all: $(LIBFILE) $(SQLITE_LIB) sqlwrite pkg
-else
-all: $(LIBFILE) $(SQLITE_LIB) sqlwrite
-endif
+all: $(LIBFILE) $(SQLITE_LIB) sqlwrite-bin $(PACKAGE)
 
 $(LIBFILE): sqlwrite.cpp fmt/src/format.cc
 	clang++ $(CXXFLAGS) $(DYNAMIC_LIB) -o $(LIBFILE) $^
@@ -29,15 +31,16 @@ $(LIBFILE): sqlwrite.cpp fmt/src/format.cc
 $(SQLITE_LIB): sqlite3.c
 	clang $(CFLAGS) $(DYNAMIC_LIB) -o $(SQLITE_LIB) $^
 
-sqlwrite: shell.c $(SQLITE_LIB)
-	clang $(CFLAGS) shell.c -L. -lsqlite3 -o sqlwrite
+sqlwrite-bin: shell.c $(SQLITE_LIB)
+	clang $(CFLAGS) shell.c -L. -lsqlite3 -o sqlwrite-bin
 
 ifeq ($(shell uname -s),Darwin)
-pkg: sqlwrite
+pkg: sqlwrite-bin
         # Create the package directory structure
 	mkdir -p pkg_root/usr/local/bin
 	mkdir -p pkg_root/usr/local/lib
 	cp sqlwrite pkg_root/usr/local/bin
+	cp sqlwrite-bin pkg_root/usr/local/bin
 	cp $(LIBFILE) pkg_root/usr/local/lib
 	cp $(SQLITE_LIB) pkg_root/usr/local/lib
 
