@@ -15,6 +15,8 @@ jobs:
         include:
           - os: ubuntu-latest
             binary_name: sqlwrite-linux.deb
+          - os: ubuntu-latest
+            binary_name: sqlwrite-linux.rpm
           - os: macos-latest
             binary_name: sqlwrite-mac.pkg
 
@@ -26,7 +28,7 @@ jobs:
         run: |
           if [[ "$RUNNER_OS" == "Linux" ]]; then
             sudo apt-get update
-            sudo apt-get install -y make curl libcurl4-openssl-dev dpkg-dev
+            sudo apt-get install -y make curl libcurl4-openssl-dev dpkg-dev rpm
           fi
 
       - name: Build with Make
@@ -34,7 +36,11 @@ jobs:
 
       - name: Package as .deb on Linux
         if: matrix.os == 'ubuntu-latest'
-        run: make linux-package
+        run: make deb-package
+
+      - name: Package as .rpm on Linux
+        if: matrix.os == 'ubuntu-latest'
+        run: make rpm-package
 
       - name: Package as .pkg on macOS
         if: matrix.os == 'macos-latest'
@@ -46,6 +52,13 @@ jobs:
         with:
           name: sqlwrite-linux.deb
           path: sqlwrite-linux.deb
+
+      - name: Upload Linux .rpm as artifact
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v3
+        with:
+          name: sqlwrite-linux.rpm
+          path: sqlwrite-linux.rpm
 
       - name: Upload macOS pkg as artifact
         if: matrix.os == 'macos-latest'
@@ -66,6 +79,12 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: sqlwrite-linux.deb
+          path: .
+
+      - name: Download Linux .rpm artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: sqlwrite-linux.rpm
           path: .
 
       - name: Download macOS pkg artifact
@@ -100,6 +119,16 @@ jobs:
           asset_path: ./sqlwrite-linux.deb
           asset_name: sqlwrite-linux.deb
           asset_content_type: application/vnd.debian.binary-package
+
+      - name: Upload Linux .rpm to release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./sqlwrite-linux.rpm
+          asset_name: sqlwrite-linux.rpm
+          asset_content_type: application/x-rpm
 
       - name: Upload macOS pkg to release
         uses: actions/upload-release-asset@v1
