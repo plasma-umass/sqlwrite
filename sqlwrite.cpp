@@ -87,13 +87,22 @@ std::string prefaceWithPrompt(const std::string& inputString, const std::string&
 // Function to calculate SHA256 hash of a string
 std::string calculateSHA256Hash(const std::string& input) {
     unsigned char hash[SHA256_DIGEST_LENGTH];
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+    EVP_MD_CTX* mdctx = EVP_MD_CTX_create();
+#else
     EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
+#endif
 
     EVP_DigestInit_ex(mdctx, EVP_sha256(), nullptr);
     EVP_DigestUpdate(mdctx, input.c_str(), input.size());
     EVP_DigestFinal_ex(mdctx, hash, nullptr);
 
+
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+    EVP_MD_CTX_destroy(mdctx);
+#else
     EVP_MD_CTX_free(mdctx);
+#endif
 
     std::string hashString;
     for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
