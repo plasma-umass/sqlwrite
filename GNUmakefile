@@ -61,14 +61,14 @@ linux-package: sqlwrite-bin
 	cp $(LIBFILE) pkg_root/usr/local/lib
 	cp $(SQLITE_LIB) pkg_root/usr/local/lib
 
-	mkdir -p DEBIAN
-	echo "Package: sqlwrite" > DEBIAN/control
-	echo "Version: 1.0" >> DEBIAN/control
-	echo "Section: base" >> DEBIAN/control
-	echo "Priority: optional" >> DEBIAN/control
-	echo "Architecture: $(shell dpkg --print-architecture)" >> DEBIAN/control
-	echo "Maintainer: your-email@example.com" >> DEBIAN/control
-	echo "Description: Sqlwrite command-line tool" >> DEBIAN/control
+	mkdir -p pkg_root/DEBIAN
+	echo "Package: sqlwrite" > pkg_root/DEBIAN/control
+	echo "Version: 1.0" >> pkg_root/DEBIAN/control
+	echo "Section: base" >> pkg_root/DEBIAN/control
+	echo "Priority: optional" >> pkg_root/DEBIAN/control
+	echo "Architecture: $(shell dpkg --print-architecture)" >> pkg_root/DEBIAN/control
+	echo "Maintainer: your-email@example.com" >> pkg_root/DEBIAN/control
+	echo "Description: Sqlwrite command-line tool" >> pkg_root/DEBIAN/control
 	dpkg-deb --build pkg_root sqlwrite-linux.deb
 
 
