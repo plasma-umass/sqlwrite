@@ -35,7 +35,7 @@ sqlwrite-bin: shell.c $(SQLITE_LIB)
 	clang $(CFLAGS) shell.c -L. -lsqlite3 -o sqlwrite-bin
 
 ifeq ($(shell uname -s),Darwin)
-pkg: sqlwrite-bin
+pkg: sqlwrite-bin $(LIBFILE) $(SQLITE_LIB)
         # Create the package directory structure
 	mkdir -p pkg_root/usr/local/bin
 	mkdir -p pkg_root/usr/local/lib
@@ -56,7 +56,7 @@ endif
 
 linux-package: deb-package rpm-package
 
-deb-package: sqlwrite-bin
+deb-package: sqlwrite-bin $(LIBFILE) $(SQLITE_LIB)
         # Create the package directory structure
 	mkdir -p pkg_root/usr/local/bin
 	mkdir -p pkg_root/usr/local/lib
@@ -74,7 +74,7 @@ deb-package: sqlwrite-bin
 	echo "Description: Sqlwrite command-line tool" >> pkg_root/DEBIAN/control
 	dpkg-deb --build pkg_root sqlwrite-linux.deb
 
-rpm-package:
+rpm-package: sqlwrite-bin $(LIBFILE) $(SQLITE_LIB)
 	mkdir -p rpm_root/usr/local/bin
 	mkdir -p rpm_root/usr/local/lib
 	cp sqlwrite-bin rpm_root/usr/local/bin
