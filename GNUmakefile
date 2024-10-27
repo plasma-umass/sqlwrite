@@ -82,7 +82,6 @@ rpm-package:
 	cp $(SQLITE_LIB) rpm_root/usr/local/lib
 
 	mkdir -p rpm_root/BUILD rpm_root/RPMS rpm_root/SOURCES rpm_root/SPECS rpm_root/SRPMS
-	mkdir -p rpm_root/SPECS
 	echo "%define _topdir $(shell pwd)/rpm_root" > rpm_root/SPECS/sqlwrite.spec
 	echo "Name: sqlwrite" >> rpm_root/SPECS/sqlwrite.spec
 	echo "Version: 1.0" >> rpm_root/SPECS/sqlwrite.spec
@@ -98,7 +97,8 @@ rpm-package:
 	echo "/usr/local/lib/$(LIBFILE)" >> rpm_root/SPECS/sqlwrite.spec
 	echo "/usr/local/lib/$(SQLITE_LIB)" >> rpm_root/SPECS/sqlwrite.spec
 
-	rpmbuild -bb rpm_root/SPECS/sqlwrite.spec --buildroot $(shell pwd)/rpm_root
+        # Run rpmbuild with the --noclean flag to prevent deleting the spec file
+	rpmbuild -bb rpm_root/SPECS/sqlwrite.spec --buildroot $(shell pwd)/rpm_root --noclean
 	cp rpm_root/RPMS/*/sqlwrite-1.0-1.*.rpm sqlwrite-linux.rpm
 
 
