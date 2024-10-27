@@ -1,0 +1,16 @@
+#!/bin/bash
+
+# Detect the operating system
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    # macOS
+    export DYLD_FALLBACK_LIBRARY_PATH="/usr/local/lib:$DYLD_FALLBACK_LIBRARY_PATH"
+elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    # Linux
+    export LD_LIBRARY_PATH="/usr/local/lib:$LD_LIBRARY_PATH"
+else
+    echo "Unsupported OS: $OSTYPE"
+    exit 1
+fi
+
+# Invoke the actual program binary with any arguments passed to the script
+/usr/local/lib/sqlwrite-bin "$@"
