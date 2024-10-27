@@ -14,7 +14,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
         include:
           - os: ubuntu-latest
-            binary_name: sqlwrite
+            binary_name: sqlwrite-linux.deb
           - os: macos-latest
             binary_name: sqlwrite-mac.pkg
 
@@ -26,22 +26,26 @@ jobs:
         run: |
           if [[ "$RUNNER_OS" == "Linux" ]]; then
             sudo apt-get update
-            sudo apt-get install -y make curl libcurl4-openssl-dev
+            sudo apt-get install -y make curl libcurl4-openssl-dev dpkg-dev
           fi
 
       - name: Build with Make
         run: make
 
+      - name: Package as .deb on Linux
+        if: matrix.os == 'ubuntu-latest'
+        run: make linux-package
+
       - name: Package as .pkg on macOS
         if: matrix.os == 'macos-latest'
         run: make pkg
 
-      - name: Upload Linux binary as artifact
+      - name: Upload Linux .deb as artifact
         if: matrix.os == 'ubuntu-latest'
         uses: actions/upload-artifact@v3
         with:
-          name: sqlwrite
-          path: sqlwrite
+          name: sqlwrite-linux.deb
+          path: sqlwrite-linux.deb
 
       - name: Upload macOS pkg as artifact
         if: matrix.os == 'macos-latest'
@@ -58,10 +62,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Download Linux artifact
+      - name: Download Linux .deb artifact
         uses: actions/download-artifact@v3
         with:
-          name: sqlwrite
+          name: sqlwrite-linux.deb
           path: .
 
       - name: Download macOS pkg artifact
@@ -87,15 +91,15 @@ jobs:
           draft: false
           prerelease: false
 
-      - name: Upload Linux binary to release
+      - name: Upload Linux .deb to release
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./sqlwrite
-          asset_name: sqlwrite
-          asset_content_type: application/octet-stream
+          asset_path: ./sqlwrite-linux.deb
+          asset_name: sqlwrite-linux.deb
+          asset_content_type: application/vnd.debian.binary-package
 
       - name: Upload macOS pkg to release
         uses: actions/upload-release-asset@v1
