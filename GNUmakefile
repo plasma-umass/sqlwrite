@@ -81,26 +81,28 @@ rpm-package:
 	cp $(LIBFILE) rpm_root/usr/local/lib
 	cp $(SQLITE_LIB) rpm_root/usr/local/lib
 
-	mkdir -p rpm_root/BUILD rpm_root/RPMS rpm_root/SOURCES rpm_root/SPECS rpm_root/SRPMS
-	echo "%define _topdir $(shell pwd)/rpm_root" > rpm_root/SPECS/sqlwrite.spec
-	echo "Name: sqlwrite" >> rpm_root/SPECS/sqlwrite.spec
-	echo "Version: 1.0" >> rpm_root/SPECS/sqlwrite.spec
-	echo "Release: 1" >> rpm_root/SPECS/sqlwrite.spec
-	echo "Summary: Sqlwrite command-line tool" >> rpm_root/SPECS/sqlwrite.spec
-	echo "License: Apache-2.0" >> rpm_root/SPECS/sqlwrite.spec
-	echo "Group: Development/Tools" >> rpm_root/SPECS/sqlwrite.spec
-	echo "BuildArch: $(shell uname -m)" >> rpm_root/SPECS/sqlwrite.spec
-	echo "%description" >> rpm_root/SPECS/sqlwrite.spec
-	echo "Sqlwrite command-line tool for SQL tasks." >> rpm_root/SPECS/sqlwrite.spec
-	echo "%files" >> rpm_root/SPECS/sqlwrite.spec
-	echo "/usr/local/bin/sqlwrite-bin" >> rpm_root/SPECS/sqlwrite.spec
-	echo "/usr/local/lib/$(LIBFILE)" >> rpm_root/SPECS/sqlwrite.spec
-	echo "/usr/local/lib/$(SQLITE_LIB)" >> rpm_root/SPECS/sqlwrite.spec
+        # Create necessary RPM build directories outside the buildroot
+	mkdir -p rpmbuild/BUILD rpmbuild/RPMS rpmbuild/SOURCES rpmbuild/SPECS rpmbuild/SRPMS
 
-        # Run rpmbuild with the --noclean flag to prevent deleting the spec file
-	rpmbuild -bb rpm_root/SPECS/sqlwrite.spec --buildroot $(shell pwd)/rpm_root --noclean
-	cp rpm_root/RPMS/*/sqlwrite-1.0-1.*.rpm sqlwrite-linux.rpm
+        # Generate the spec file outside the buildroot
+	echo "%define _topdir $(shell pwd)/rpmbuild" > rpmbuild/SPECS/sqlwrite.spec
+	echo "Name: sqlwrite" >> rpmbuild/SPECS/sqlwrite.spec
+	echo "Version: 1.0" >> rpmbuild/SPECS/sqlwrite.spec
+	echo "Release: 1" >> rpmbuild/SPECS/sqlwrite.spec
+	echo "Summary: Sqlwrite command-line tool" >> rpmbuild/SPECS/sqlwrite.spec
+	echo "License: Apache-2.0" >> rpmbuild/SPECS/sqlwrite.spec
+	echo "Group: Development/Tools" >> rpmbuild/SPECS/sqlwrite.spec
+	echo "BuildArch: $(shell uname -m)" >> rpmbuild/SPECS/sqlwrite.spec
+	echo "%description" >> rpmbuild/SPECS/sqlwrite.spec
+	echo "Sqlwrite command-line tool for SQL tasks." >> rpmbuild/SPECS/sqlwrite.spec
+	echo "%files" >> rpmbuild/SPECS/sqlwrite.spec
+	echo "/usr/local/bin/sqlwrite-bin" >> rpmbuild/SPECS/sqlwrite.spec
+	echo "/usr/local/lib/$(LIBFILE)" >> rpmbuild/SPECS/sqlwrite.spec
+	echo "/usr/local/lib/$(SQLITE_LIB)" >> rpmbuild/SPECS/sqlwrite.spec
 
+        # Run rpmbuild with the spec file outside the buildroot
+	rpmbuild -bb rpmbuild/SPECS/sqlwrite.spec --buildroot $(shell pwd)/rpm_root
+	cp rpmbuild/RPMS/*/sqlwrite-1.0-1.*.rpm sqlwrite-linux.rpm
 
 clean:
 	rm -rf sqlwrite-mac.pkg sqlwrite-linux.deb sqlwrite-bin $(LIBFILE) $(SQLITE_LIB)
