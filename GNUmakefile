@@ -1,19 +1,17 @@
 LIBNAME := sqlwrite
 OPTIMIZATION := # -O3
 CXXFLAGS := -std=c++17 -g $(OPTIMIZATION) -DNDEBUG -I. -Ifmt/include
-CFLAGS := $(OPTIMIZATION) -g -DNDEBUG -fPIC -shared
+CFLAGS := $(OPTIMIZATION) -g -DNDEBUG -fPIC
 
 
 # Check for macOS and set variables accordingly
 ifeq ($(shell uname -s),Darwin)
 DYLIB_EXT = dylib
-LDFLAGS = -dynamiclib
 DYNAMIC_LIB := -dynamiclib
 CXXFLAGS := $(CXXFLAGS) -arch arm64 $(shell pkg-config --cflags --libs libcurl openssl)
 PACKAGE := pkg
 else
 DYLIB_EXT = so
-LDFLAGS = -shared
 DYNAMIC_LIB := -shared -fPIC
 CXXFLAGS := $(CXXFLAGS) -lcurl -lssl -lcrypto
 PACKAGE := linux-package
@@ -40,13 +38,13 @@ pkg: sqlwrite-bin $(LIBFILE) $(SQLITE_LIB)
 	mkdir -p pkg_root/usr/local/bin
 	mkdir -p pkg_root/usr/local/lib
 	cp sqlwrite pkg_root/usr/local/bin
-	cp sqlwrite-bin pkg_root/usr/local/bin
+	cp sqlwrite-bin pkg_root/usr/local/lib
 	cp $(LIBFILE) pkg_root/usr/local/lib
 	cp $(SQLITE_LIB) pkg_root/usr/local/lib
 
         # Adjust the binary to reference the correct library paths
-	install_name_tool -change libsqlite3.dylib /usr/local/lib/$(SQLITE_LIB) pkg_root/usr/local/bin/sqlwrite
-	install_name_tool -change $(LIBFILE) /usr/local/lib/$(LIBFILE) pkg_root/usr/local/bin/sqlwrite
+	install_name_tool -change libsqlite3.dylib /usr/local/lib/$(SQLITE_LIB) pkg_root/usr/local/lib/sqlwrite-bin
+        # install_name_tool -change $(LIBFILE) /usr/local/lib/$(LIBFILE) pkg_root/usr/local/lib/sqlwrite-bin
 
         # Use pkgbuild to create the .pkg installer
 	pkgbuild --root pkg_root --identifier $(DOMAIN) --version 1.0 --install-location / sqlwrite-mac.pkg
@@ -60,6 +58,7 @@ deb-package: sqlwrite-bin $(LIBFILE) $(SQLITE_LIB)
         # Create the package directory structure
 	mkdir -p pkg_root/usr/local/bin
 	mkdir -p pkg_root/usr/local/lib
+	cp sqlwrite pkg_root/usr/local/bin
 	cp sqlwrite-bin pkg_root/usr/local/bin
 	cp $(LIBFILE) pkg_root/usr/local/lib
 	cp $(SQLITE_LIB) pkg_root/usr/local/lib
@@ -77,6 +76,7 @@ deb-package: sqlwrite-bin $(LIBFILE) $(SQLITE_LIB)
 rpm-package: sqlwrite-bin $(LIBFILE) $(SQLITE_LIB)
 	mkdir -p rpm_root/usr/local/bin
 	mkdir -p rpm_root/usr/local/lib
+	cp sqlwrite rpm_root/usr/local/bin
 	cp sqlwrite-bin rpm_root/usr/local/bin
 	cp $(LIBFILE) rpm_root/usr/local/lib
 	cp $(SQLITE_LIB) rpm_root/usr/local/lib
@@ -96,6 +96,7 @@ rpm-package: sqlwrite-bin $(LIBFILE) $(SQLITE_LIB)
 	echo "%description" >> rpmbuild/SPECS/sqlwrite.spec
 	echo "Sqlwrite command-line tool for SQL tasks." >> rpmbuild/SPECS/sqlwrite.spec
 	echo "%files" >> rpmbuild/SPECS/sqlwrite.spec
+	echo "/usr/local/bin/sqlwrite" >> rpmbuild/SPECS/sqlwrite.spec
 	echo "/usr/local/bin/sqlwrite-bin" >> rpmbuild/SPECS/sqlwrite.spec
 	echo "/usr/local/lib/$(LIBFILE)" >> rpmbuild/SPECS/sqlwrite.spec
 	echo "/usr/local/lib/$(SQLITE_LIB)" >> rpmbuild/SPECS/sqlwrite.spec
