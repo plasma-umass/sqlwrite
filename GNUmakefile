@@ -16,7 +16,7 @@ DYLIB_EXT = so
 LDFLAGS = -shared
 DYNAMIC_LIB := -shared -fPIC
 CXXFLAGS := $(CXXFLAGS) -lcurl -lssl -lcrypto
-PACKAGE := 
+PACKAGE := linux-package
 endif
 
 LIBFILE := $(LIBNAME).$(DYLIB_EXT)
@@ -52,8 +52,27 @@ pkg: sqlwrite-bin
 	pkgbuild --root pkg_root --identifier $(DOMAIN) --version 1.0 --install-location / sqlwrite-mac.pkg
 endif
 
+# Packaging for Linux systems
+linux-package: sqlwrite-bin
+        # Create the package directory structure
+	mkdir -p pkg_root/usr/local/bin
+	mkdir -p pkg_root/usr/local/lib
+	cp sqlwrite-bin pkg_root/usr/local/bin
+	cp $(LIBFILE) pkg_root/usr/local/lib
+	cp $(SQLITE_LIB) pkg_root/usr/local/lib
+
+	mkdir -p DEBIAN
+	echo "Package: sqlwrite" > DEBIAN/control
+	echo "Version: 1.0" >> DEBIAN/control
+	echo "Section: base" >> DEBIAN/control
+	echo "Priority: optional" >> DEBIAN/control
+	echo "Architecture: $(shell dpkg --print-architecture)" >> DEBIAN/control
+	echo "Maintainer: your-email@example.com" >> DEBIAN/control
+	echo "Description: Sqlwrite command-line tool" >> DEBIAN/control
+	dpkg-deb --build pkg_root sqlwrite-linux.deb
+
 
 clean:
-	rm -rf sqlwrite-mac.pkg sqlwrite $(LIBFILE) $(SQLITE_LIB)
+	rm -rf sqlwrite-mac.pkg sqlwrite-linux.deb sqlwrite-bin $(LIBFILE) $(SQLITE_LIB)
 
 
