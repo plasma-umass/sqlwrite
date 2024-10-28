@@ -13,6 +13,7 @@ PACKAGE := pkg
 else
 DYLIB_EXT = so
 DYNAMIC_LIB := -shared -fPIC
+CFLAGS := $(CFLAGS) -lpthread -ldl
 CXXFLAGS := $(CXXFLAGS) -lcurl -lssl -lcrypto
 PACKAGE := linux-package
 endif
@@ -59,7 +60,7 @@ deb-package: sqlwrite-bin $(LIBFILE) $(SQLITE_LIB)
 	mkdir -p pkg_root/usr/local/bin
 	mkdir -p pkg_root/usr/local/lib
 	cp sqlwrite pkg_root/usr/local/bin
-	cp sqlwrite-bin pkg_root/usr/local/bin
+	cp sqlwrite-bin pkg_root/usr/local/lib
 	cp $(LIBFILE) pkg_root/usr/local/lib
 	cp $(SQLITE_LIB) pkg_root/usr/local/lib
 
@@ -77,7 +78,7 @@ rpm-package: sqlwrite-bin $(LIBFILE) $(SQLITE_LIB)
 	mkdir -p rpm_root/usr/local/bin
 	mkdir -p rpm_root/usr/local/lib
 	cp sqlwrite rpm_root/usr/local/bin
-	cp sqlwrite-bin rpm_root/usr/local/bin
+	cp sqlwrite-bin rpm_root/usr/local/lib
 	cp $(LIBFILE) rpm_root/usr/local/lib
 	cp $(SQLITE_LIB) rpm_root/usr/local/lib
 
@@ -97,7 +98,7 @@ rpm-package: sqlwrite-bin $(LIBFILE) $(SQLITE_LIB)
 	echo "Sqlwrite command-line tool for SQL tasks." >> rpmbuild/SPECS/sqlwrite.spec
 	echo "%files" >> rpmbuild/SPECS/sqlwrite.spec
 	echo "/usr/local/bin/sqlwrite" >> rpmbuild/SPECS/sqlwrite.spec
-	echo "/usr/local/bin/sqlwrite-bin" >> rpmbuild/SPECS/sqlwrite.spec
+	echo "/usr/local/lib/sqlwrite-bin" >> rpmbuild/SPECS/sqlwrite.spec
 	echo "/usr/local/lib/$(LIBFILE)" >> rpmbuild/SPECS/sqlwrite.spec
 	echo "/usr/local/lib/$(SQLITE_LIB)" >> rpmbuild/SPECS/sqlwrite.spec
 
