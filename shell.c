@@ -26892,7 +26892,7 @@ static void main_init(ShellState *data) {
   sqlite3_config(SQLITE_CONFIG_URI, 1);
   sqlite3_config(SQLITE_CONFIG_LOG, shellLog, data);
   sqlite3_config(SQLITE_CONFIG_MULTITHREAD);
-  sqlite3_snprintf(sizeof(mainPrompt), mainPrompt,"sqlite> ");
+  sqlite3_snprintf(sizeof(mainPrompt), mainPrompt,"sqlwrite> ");
   sqlite3_snprintf(sizeof(continuePrompt), continuePrompt,"   ...> ");
 }
 
@@ -27470,7 +27470,7 @@ int SQLITE_CDECL wmain(int argc, wchar_t **wargv){
       char *zHistory;
       int nHistory;
       printf(
-        "SQLite version %s %.19s\n" /*extra-version-info*/
+        "SQLite version %s %.19s [SQLwrite]\n" /*extra-version-info*/
         "Enter \".help\" for usage hints.\n",
         sqlite3_libversion(), sqlite3_sourceid()
       );
