@@ -13,8 +13,17 @@ PACKAGE := pkg
 else
 DYLIB_EXT = so
 DYNAMIC_LIB := -shared -fPIC
+CFLAGS := $(CFLAGS) -lpthread -ldl
 CXXFLAGS := $(CXXFLAGS) -lcurl -lssl -lcrypto
-PACKAGE := linux-package
+
+ifneq ($(shell command -v rpm 2>/dev/null),)
+PACKAGE := rpm-package
+endif
+# Check for deb (apt/dpkg)
+ifneq ($(shell command -v dpkg 2>/dev/null),)
+PACKAGE := deb-package
+endif
+
 endif
 
 LIBFILE := $(LIBNAME).$(DYLIB_EXT)
@@ -50,16 +59,12 @@ pkg: sqlwrite-bin $(LIBFILE) $(SQLITE_LIB)
 	pkgbuild --root pkg_root --identifier $(DOMAIN) --version 1.0 --install-location / sqlwrite-mac.pkg
 endif
 
-# Packaging for Linux systems
-
-linux-package: deb-package rpm-package
-
 deb-package: sqlwrite-bin $(LIBFILE) $(SQLITE_LIB)
         # Create the package directory structure
 	mkdir -p pkg_root/usr/local/bin
 	mkdir -p pkg_root/usr/local/lib
 	cp sqlwrite pkg_root/usr/local/bin
-	cp sqlwrite-bin pkg_root/usr/local/bin
+	cp sqlwrite-bin pkg_root/usr/local/lib
 	cp $(LIBFILE) pkg_root/usr/local/lib
 	cp $(SQLITE_LIB) pkg_root/usr/local/lib
 
@@ -77,7 +82,7 @@ rpm-package: sqlwrite-bin $(LIBFILE) $(SQLITE_LIB)
 	mkdir -p rpm_root/usr/local/bin
 	mkdir -p rpm_root/usr/local/lib
 	cp sqlwrite rpm_root/usr/local/bin
-	cp sqlwrite-bin rpm_root/usr/local/bin
+	cp sqlwrite-bin rpm_root/usr/local/lib
 	cp $(LIBFILE) rpm_root/usr/local/lib
 	cp $(SQLITE_LIB) rpm_root/usr/local/lib
 
@@ -97,7 +102,7 @@ rpm-package: sqlwrite-bin $(LIBFILE) $(SQLITE_LIB)
 	echo "Sqlwrite command-line tool for SQL tasks." >> rpmbuild/SPECS/sqlwrite.spec
 	echo "%files" >> rpmbuild/SPECS/sqlwrite.spec
 	echo "/usr/local/bin/sqlwrite" >> rpmbuild/SPECS/sqlwrite.spec
-	echo "/usr/local/bin/sqlwrite-bin" >> rpmbuild/SPECS/sqlwrite.spec
+	echo "/usr/local/lib/sqlwrite-bin" >> rpmbuild/SPECS/sqlwrite.spec
 	echo "/usr/local/lib/$(LIBFILE)" >> rpmbuild/SPECS/sqlwrite.spec
 	echo "/usr/local/lib/$(SQLITE_LIB)" >> rpmbuild/SPECS/sqlwrite.spec
 
@@ -106,6 +111,6 @@ rpm-package: sqlwrite-bin $(LIBFILE) $(SQLITE_LIB)
 	cp rpmbuild/RPMS/*/sqlwrite-1.0-1.*.rpm sqlwrite-linux.rpm
 
 clean:
-	rm -rf sqlwrite-mac.pkg sqlwrite-linux.deb sqlwrite-bin $(LIBFILE) $(SQLITE_LIB)
+	rm -rf sqlwrite-mac.pkg sqlwrite-linux.deb sqlwrite-linux.rpm sqlwrite-bin $(LIBFILE) $(SQLITE_LIB)
 
 
